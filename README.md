@@ -4,6 +4,10 @@
   <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/palette/macchiato.png" width="400" />
 </p>
 
+
+> [!NOTE]
+> Bu yapılandırma [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) reposundan fork edilerek / temel alınarak geliştirilmiştir. Üzerine Material 3 tasarım dilinde geliştirilmiş medya oynatıcı, CPU sıcaklık takipçili görev yöneticisi, macOS popover appletleri ve performans optimizasyonları eklenmiştir.
+
 Modern, akıcı ve yüksek performanslı **Hyprland** masaüstü yapılandırması. **Waybar**, **Dunst**, **Kitty**, **Tofi**, **Rofi** ve Python/GTK3 ile sıfırdan geliştirilmiş **Material 3 / macOS Popover** tarzı bağımsız sistem araçlarını içerir.
 
 ---
@@ -95,6 +99,12 @@ hyprland-dotfiles/
 ```
 
 ---
+
+
+## 🙏 Teşekkür & Referanslar
+- **Temel Yapı:** [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) (Forked & customized)
+- **Renk Paleti:** [Catppuccin Mocha](https://github.com/catppuccin/catppuccin)
+- **Tasarım İlhamı:** Material Design 3 Expressive & macOS Popover Design
 
 ## 📜 Lisans
 MIT License. Dilediğiniz gibi kullanabilir, özelleştirebilir ve paylaşabilirsiniz.

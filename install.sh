@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Catppuccin Mocha Hyprland & Custom Applets Installer
+# Catppuccin Mocha Hyprland & Custom Applets Installer (Forked from simple-hyprland)
 # ==============================================================================
 
 set -e
@@ -25,7 +25,7 @@ echo "  ██║  ██║██║   ██║   ██║   ██╔══�
 echo "  ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║"
 echo "  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝"
 echo -e "${NC}"
-echo -e "${BOLD}Catppuccin Mocha Hyprland & Custom Applets Installer${NC}\n"
+echo -e "${BOLD}Catppuccin Mocha Hyprland & Custom Applets Installer (Forked from simple-hyprland)${NC}\n"
 
 # ------------------------------------------------------------------------------
 # 1. Package Installation
