@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+# Toggle: If rofi is already open, close it
+if pkill -x rofi; then
+    exit 0
+fi
+
+# Start transparent full-screen overlay to detect clicks outside Rofi
+slurp -b '#00000000' -c '#00000000' -s '#00000000' >/dev/null 2>&1 &
+SLURP_PID=$!
+
+# Monitor loop: if slurp detects a click outside, kill rofi
+(
+    while kill -0 "$SLURP_PID" 2>/dev/null; do
+        if ! pgrep -x rofi >/dev/null; then
+            kill "$SLURP_PID" 2>/dev/null
+            exit 0
+        fi
+        sleep 0.05
+    done
+    pkill -x rofi 2>/dev/null
+) &
+MONITOR_PID=$!
+
+# Run cliphist with rofi in spotlight style
+selected=$(cliphist list | rofi -dmenu -p "󰅌 " -theme ~/.config/rofi/clipboard.rasi)
+rofi_status=$?
+
+# Cleanup
+kill "$SLURP_PID" "$MONITOR_PID" 2>/dev/null
+wait "$SLURP_PID" "$MONITOR_PID" 2>/dev/null
+
+# If an item was successfully selected, copy to clipboard
+if [ $rofi_status -eq 0 ] && [ -n "$selected" ]; then
+    echo "$selected" | cliphist decode | wl-copy
+fi

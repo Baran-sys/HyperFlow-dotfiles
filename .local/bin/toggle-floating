@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fast toggle floating with default dimensions: 1171x673 at 164,116
+
+read -r is_floating < <(hyprctl activewindow -j | jq -r '.floating // empty')
+
+if [ "$is_floating" = "true" ]; then
+    hyprctl dispatch togglefloating
+else
+    hyprctl --batch "dispatch togglefloating; dispatch resizeactive exact 1171 673; dispatch moveactive exact 164 116"
+fi

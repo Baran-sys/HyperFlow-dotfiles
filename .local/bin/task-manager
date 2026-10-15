@@ -1,0 +1,686 @@
+#!/usr/bin/env python3
+import sys
+import os
+import signal
+
+# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
+my_pid = os.getpid()
+my_name = os.path.basename(sys.argv[0])
+for pid_str in os.listdir('/proc'):
+    if pid_str.isdigit() and int(pid_str) != my_pid:
+        try:
+            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
+                cmd = pf.read().decode(errors='ignore')
+                if my_name in cmd and 'python' in cmd:
+                    os.kill(int(pid_str), signal.SIGTERM)
+                    sys.exit(0)
+        except Exception:
+            pass
+
+import sys
+import os
+import time
+import glob
+import signal
+import psutil
+import subprocess
+import gi
+
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+
+CSS_STYLE = b"""
+window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 12px;
+}
+
+headerbar {
+    background-color: #181825;
+    border-bottom: 1px solid #313244;
+    color: #cdd6f4;
+    padding: 5px 12px;
+}
+
+headerbar button {
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 8px;
+    border: 1px solid #45475a;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+headerbar button:hover {
+    background: #45475a;
+    color: #ffffff;
+}
+
+.metric-card {
+    background: #252538;
+    border: 1px solid #313244;
+    border-radius: 10px;
+    padding: 6px 10px;
+    margin: 6px 4px 3px 4px;
+}
+
+.metric-title {
+    font-size: 10px;
+    color: #a6adc8;
+    font-weight: bold;
+}
+
+.metric-value {
+    font-size: 13px;
+    font-weight: 800;
+    color: #cdd6f4;
+}
+
+progressbar trough {
+    background-color: #313244;
+    border-radius: 4px;
+    min-height: 5px;
+    min-width: 60px;
+}
+
+progressbar progress {
+    background-color: #89b4fa;
+    border-radius: 4px;
+}
+
+.progress-ram progress {
+    background-color: #a6e3a1;
+}
+
+.progress-gpu progress {
+    background-color: #cba6f7;
+}
+
+.search-box {
+    margin: 4px 8px;
+    background-color: #252538;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    color: #cdd6f4;
+    padding: 4px 10px;
+    font-size: 11px;
+}
+
+.search-box:focus {
+    border-color: #89b4fa;
+    box-shadow: none;
+    outline: none;
+}
+
+treeview {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    font-size: 11px;
+}
+
+treeview:selected {
+    background-color: #45475a;
+    color: #ffffff;
+}
+
+treeview header button {
+    background-color: #181825;
+    color: #89b4fa;
+    font-weight: bold;
+    border: none;
+    border-bottom: 1px solid #313244;
+    padding: 4px 6px;
+    font-size: 11px;
+}
+
+.btn-kill {
+    background: #f38ba8;
+    color: #11111b;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    border: none;
+    margin-right: 4px;
+}
+
+.btn-kill:hover {
+    background: #eba0ac;
+}
+
+.btn-kill:disabled {
+    background: #45475a;
+    color: #6c7086;
+}
+
+.status-bar {
+    background-color: #181825;
+    border-top: 1px solid #313244;
+    padding: 4px 10px;
+    color: #a6adc8;
+    font-size: 11px;
+}
+"""
+
+class TaskManagerWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(title="Görev Yöneticisi", application=app)
+        self.set_default_size(620, 440)
+        self.set_position(Gtk.WindowPosition.CENTER)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("focus-out-event", self.on_focus_out)
+        self.ready_to_close = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        self.selected_pid = None
+        self.selected_name = ""
+
+        # GPU tracking history: pid -> (timestamp, total_ns)
+        self.intel_gpu_times = {}
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # HeaderBar
+        self.header = Gtk.HeaderBar()
+        self.header.set_show_close_button(True)
+        self.header.set_title("Görev Yöneticisi")
+        self.header.set_subtitle("CPU • RAM • GPU Kaynak İzleyici")
+        self.set_titlebar(self.header)
+
+        btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
+        btn_refresh.set_tooltip_text("İşlem Listesini Yenile")
+        btn_refresh.connect("clicked", lambda b: self.refresh_processes())
+        self.header.pack_start(btn_refresh)
+
+        # Metrics Row (CPU, RAM & GPU)
+        metrics_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, homogeneous=True)
+        metrics_box.set_margin_start(4)
+        metrics_box.set_margin_end(4)
+
+        # 1. CPU Card
+        self.card_cpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.card_cpu.get_style_context().add_class("metric-card")
+        self.card_cpu.set_tooltip_text("İşlemci (CPU)")
+        h_cpu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        lbl_cpu_t = Gtk.Label(label="CPU")
+        lbl_cpu_t.get_style_context().add_class("metric-title")
+        self.lbl_cpu_v = Gtk.Label(label="%0.0 (0°C)")
+        self.lbl_cpu_v.get_style_context().add_class("metric-value")
+        h_cpu.pack_start(lbl_cpu_t, False, False, 0)
+        h_cpu.pack_end(self.lbl_cpu_v, False, False, 0)
+        self.card_cpu.pack_start(h_cpu, False, False, 0)
+        self.pb_cpu = Gtk.ProgressBar()
+        self.card_cpu.pack_start(self.pb_cpu, False, False, 0)
+        metrics_box.pack_start(self.card_cpu, True, True, 0)
+
+        # 2. RAM Card
+        card_ram = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        card_ram.get_style_context().add_class("metric-card")
+        h_ram = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        lbl_ram_t = Gtk.Label(label="RAM")
+        lbl_ram_t.get_style_context().add_class("metric-title")
+        self.lbl_ram_v = Gtk.Label(label="0.0G (%0)")
+        self.lbl_ram_v.get_style_context().add_class("metric-value")
+        h_ram.pack_start(lbl_ram_t, False, False, 0)
+        h_ram.pack_end(self.lbl_ram_v, False, False, 0)
+        card_ram.pack_start(h_ram, False, False, 0)
+        self.pb_ram = Gtk.ProgressBar()
+        self.pb_ram.get_style_context().add_class("progress-ram")
+        card_ram.pack_start(self.pb_ram, False, False, 0)
+        metrics_box.pack_start(card_ram, True, True, 0)
+
+        # 3. GPU Card (RTX 4060 + Intel UHD)
+        card_gpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        card_gpu.get_style_context().add_class("metric-card")
+        card_gpu.set_tooltip_text("GPU (NVIDIA RTX 4060 + Intel UHD)")
+        h_gpu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        lbl_gpu_t = Gtk.Label(label="GPU")
+        lbl_gpu_t.get_style_context().add_class("metric-title")
+        self.lbl_gpu_v = Gtk.Label(label="%0 (0°C)")
+        self.lbl_gpu_v.get_style_context().add_class("metric-value")
+        h_gpu.pack_start(lbl_gpu_t, False, False, 0)
+        h_gpu.pack_end(self.lbl_gpu_v, False, False, 0)
+        card_gpu.pack_start(h_gpu, False, False, 0)
+        self.pb_gpu = Gtk.ProgressBar()
+        self.pb_gpu.get_style_context().add_class("progress-gpu")
+        card_gpu.pack_start(self.pb_gpu, False, False, 0)
+        metrics_box.pack_start(card_gpu, True, True, 0)
+
+        main_box.pack_start(metrics_box, False, False, 0)
+
+        # Search Entry
+        self.search_entry = Gtk.SearchEntry()
+        self.search_entry.get_style_context().add_class("search-box")
+        self.search_entry.set_placeholder_text("İşlem ara (İsim, PID veya 'nvidia', 'intel')...")
+        self.search_entry.connect("search-changed", self.on_search_changed)
+        main_box.pack_start(self.search_entry, False, False, 0)
+
+        # Scrolled TreeView
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        main_box.pack_start(scrolled, True, True, 0)
+
+        # ListStore:
+        # 0: PID (int)
+        # 1: Name (str)
+        # 2: CPU (float)
+        # 3: RAM_MB (float)
+        # 4: GPU_PCT (float)
+        # 5: GPU_DEV (str)
+        # 6: User (str)
+        # 7: GPU_MARKUP (str)
+        self.store = Gtk.ListStore(int, str, float, float, float, str, str, str)
+        self.filter_model = self.store.filter_new()
+        self.filter_model.set_visible_func(self.filter_func)
+        self.sort_model = Gtk.TreeModelSort(model=self.filter_model)
+        self.treeview = Gtk.TreeView(model=self.sort_model)
+        self.treeview.get_selection().connect("changed", self.on_selection_changed)
+        scrolled.add(self.treeview)
+
+        self.setup_columns()
+
+        # Action / Status Bar (Bottom)
+        self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.status_box.get_style_context().add_class("status-bar")
+
+        self.lbl_proc_count = Gtk.Label(label="Yükleniyor...")
+        self.status_box.pack_start(self.lbl_proc_count, False, False, 0)
+
+        self.lbl_selected_proc = Gtk.Label(label="Bir işlem seçin")
+        self.lbl_selected_proc.set_ellipsize(Pango.EllipsizeMode.END)
+        self.lbl_selected_proc.set_max_width_chars(32)
+        self.status_box.pack_start(self.lbl_selected_proc, True, True, 0)
+
+        self.btn_kill = Gtk.Button(label="İşlemi Sonlandır")
+        self.btn_kill.get_style_context().add_class("btn-kill")
+        self.btn_kill.set_sensitive(False)
+        self.btn_kill.connect("clicked", lambda b: self.kill_selected_process(signal.SIGTERM))
+        self.status_box.pack_end(self.btn_kill, False, False, 0)
+
+        main_box.pack_end(self.status_box, False, False, 0)
+
+        self.show_all()
+        self.set_focus(None)
+
+        def _initial_load():
+            self.refresh_metrics()
+            self.refresh_processes()
+            return False
+
+        GLib.idle_add(_initial_load)
+
+        # Timers
+        GLib.timeout_add_seconds(2, self.on_timer_refresh)
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
+            self.close()
+            return True
+        return False
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def setup_columns(self):
+        # 0: PID
+        cell_pid = Gtk.CellRendererText()
+        cell_pid.set_property("xalign", 1.0)
+        col_pid = Gtk.TreeViewColumn("PID", cell_pid, text=0)
+        col_pid.set_sort_column_id(0)
+        col_pid.set_resizable(True)
+        col_pid.set_min_width(46)
+        col_pid.set_fixed_width(50)
+        self.treeview.append_column(col_pid)
+
+        # 1: İşlem Adı
+        cell_name = Gtk.CellRendererText()
+        cell_name.set_property("weight", Pango.Weight.BOLD)
+        cell_name.set_property("ellipsize", Pango.EllipsizeMode.END)
+        col_name = Gtk.TreeViewColumn("İşlem Adı", cell_name, text=1)
+        col_name.set_sort_column_id(1)
+        col_name.set_resizable(True)
+        col_name.set_expand(True)
+        col_name.set_min_width(140)
+        self.treeview.append_column(col_name)
+
+        # 2: CPU %
+        cell_cpu = Gtk.CellRendererText()
+        cell_cpu.set_property("xalign", 1.0)
+        col_cpu = Gtk.TreeViewColumn("CPU", cell_cpu)
+        col_cpu.set_cell_data_func(
+            cell_cpu,
+            lambda c, cell, m, it, d: cell.set_property("text", f"{m.get_value(it, 2):.1f}%" if m.get_value(it, 2) > 0.0 else "-")
+        )
+        col_cpu.set_sort_column_id(2)
+        col_cpu.set_resizable(True)
+        col_cpu.set_min_width(52)
+        col_cpu.set_fixed_width(56)
+        self.treeview.append_column(col_cpu)
+
+        # 3: RAM
+        cell_ram = Gtk.CellRendererText()
+        cell_ram.set_property("xalign", 1.0)
+        col_ram = Gtk.TreeViewColumn("RAM", cell_ram)
+        col_ram.set_cell_data_func(
+            cell_ram,
+            lambda c, cell, m, it, d: cell.set_property(
+                "text",
+                f"{m.get_value(it, 3)/1024:.1f}G" if m.get_value(it, 3) >= 1024 else f"{m.get_value(it, 3):.0f}M"
+            )
+        )
+        col_ram.set_sort_column_id(3)
+        col_ram.set_resizable(True)
+        col_ram.set_min_width(68)
+        col_ram.set_fixed_width(74)
+        self.treeview.append_column(col_ram)
+
+        # 4: GPU %
+        cell_gpu = Gtk.CellRendererText()
+        cell_gpu.set_property("xalign", 1.0)
+        col_gpu = Gtk.TreeViewColumn("GPU %", cell_gpu)
+        col_gpu.set_cell_data_func(
+            cell_gpu,
+            lambda c, cell, m, it, d: cell.set_property("text", f"{m.get_value(it, 4):.1f}%" if m.get_value(it, 4) > 0.0 else "-")
+        )
+        col_gpu.set_sort_column_id(4)
+        col_gpu.set_resizable(True)
+        col_gpu.set_min_width(52)
+        col_gpu.set_fixed_width(56)
+        self.treeview.append_column(col_gpu)
+
+        # 5: GPU Aygıtı (NVIDIA / Intel / Hibrit)
+        cell_dev = Gtk.CellRendererText()
+        cell_dev.set_property("xalign", 0.5)
+        col_dev = Gtk.TreeViewColumn("GPU", cell_dev, markup=7)
+        col_dev.set_sort_column_id(5)
+        col_dev.set_resizable(True)
+        col_dev.set_min_width(66)
+        col_dev.set_fixed_width(72)
+        self.treeview.append_column(col_dev)
+
+        # Varsayılan sıralama: RAM azalan
+        self.sort_model.set_sort_column_id(3, Gtk.SortType.DESCENDING)
+
+    def get_cpu_temp(self):
+        try:
+            temps = psutil.sensors_temperatures()
+            if not temps:
+                return None
+            if 'coretemp' in temps:
+                for entry in temps['coretemp']:
+                    if 'Package id 0' in entry.label:
+                        return int(round(entry.current))
+                if temps['coretemp']:
+                    return int(round(temps['coretemp'][0].current))
+            for k in ('k10temp', 'zenpower', 'acpitz', 'cpu_thermal'):
+                if k in temps and temps[k]:
+                    return int(round(temps[k][0].current))
+            for name, entries in temps.items():
+                if 'cpu' in name.lower() and entries:
+                    return int(round(entries[0].current))
+        except Exception:
+            pass
+        return None
+
+    def refresh_metrics(self):
+        try:
+            cpu_pct = psutil.cpu_percent()
+            cpu_temp = self.get_cpu_temp()
+            temp_str = f" ({cpu_temp}°C)" if cpu_temp is not None else ""
+            self.lbl_cpu_v.set_text(f"%{cpu_pct:.1f}{temp_str}")
+            self.pb_cpu.set_fraction(min(max(cpu_pct / 100.0, 0.0), 1.0))
+            if cpu_temp is not None:
+                self.card_cpu.set_tooltip_text(f"İşlemci (CPU): %{cpu_pct:.1f} • Sıcaklık: {cpu_temp}°C")
+            else:
+                self.card_cpu.set_tooltip_text(f"İşlemci (CPU): %{cpu_pct:.1f}")
+
+            mem = psutil.virtual_memory()
+            used_gb = mem.used / (1024**3)
+            tot_gb = mem.total / (1024**3)
+            self.lbl_ram_v.set_text(f"{used_gb:.1f}G (%{mem.percent:.0f})")
+            self.pb_ram.set_fraction(min(max(mem.percent / 100.0, 0.0), 1.0))
+
+            nv_util = 0
+            nv_temp = 0
+            try:
+                out = subprocess.check_output(
+                    ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                    text=True, timeout=0.3
+                ).strip()
+                parts = [p.strip() for p in out.split(",")]
+                if len(parts) >= 2:
+                    nv_util = int(parts[0])
+                    nv_temp = int(parts[1])
+            except Exception:
+                pass
+
+            # Intel GPU freq
+            intel_mhz = 0
+            try:
+                with open("/sys/class/drm/card1/device/drm/card1/gt_act_freq_mhz", "r") as f:
+                    intel_mhz = int(f.read().strip())
+            except Exception:
+                pass
+
+            gpu_disp = max(nv_util, int(round((intel_mhz / 1400.0) * 100))) if intel_mhz > 0 else nv_util
+            self.lbl_gpu_v.set_text(f"%{gpu_disp} (NV: {nv_temp}°C)")
+            self.pb_gpu.set_fraction(min(max(gpu_disp / 100.0, 0.0), 1.0))
+
+            gpu_temp_str = f" ({nv_temp}°C)" if nv_temp > 0 else ""
+            self.header.set_subtitle(f"CPU: %{cpu_pct:.0f}{temp_str}  •  RAM: %{mem.percent:.0f}  •  GPU: %{gpu_disp}{gpu_temp_str}")
+        except Exception:
+            pass
+
+    def get_gpu_processes(self):
+        now = time.time()
+        gpu_devices = {} # pid -> set of ("NVIDIA", "Intel")
+        gpu_usage = {}   # pid -> float %
+
+        # 1. Check NVIDIA via nvidia-smi pmon
+        try:
+            res = subprocess.run(["nvidia-smi", "pmon", "-c", "1"], capture_output=True, text=True, timeout=0.3)
+            for line in res.stdout.splitlines():
+                if line.startswith("#") or not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 5 and parts[1].isdigit():
+                    pid = int(parts[1])
+                    sm = parts[3]
+                    pct = float(sm) if sm.isdigit() else 0.0
+                    gpu_usage[pid] = pct
+                    gpu_devices.setdefault(pid, set()).add("NVIDIA")
+        except Exception:
+            pass
+
+        # Also check nvidia-smi -q -d PIDS
+        try:
+            res = subprocess.run(["nvidia-smi", "-q", "-d", "PIDS"], capture_output=True, text=True, timeout=0.3)
+            for line in res.stdout.splitlines():
+                if "Process ID" in line:
+                    parts = line.split(":")
+                    if len(parts) >= 2 and parts[1].strip().isdigit():
+                        curr_pid = int(parts[1].strip())
+                        gpu_devices.setdefault(curr_pid, set()).add("NVIDIA")
+        except Exception:
+            pass
+
+        # 2. Check Intel i915 DRM fdinfo & compute engine utilization
+        new_intel_times = {}
+        for pid_dir in glob.glob("/proc/[0-9]*"):
+            fdinfo = os.path.join(pid_dir, "fdinfo")
+            if not os.path.exists(fdinfo):
+                continue
+            try:
+                pid = int(os.path.basename(pid_dir))
+                total_ns = 0
+                is_intel = False
+                for f in os.listdir(fdinfo):
+                    try:
+                        with open(os.path.join(fdinfo, f), "r") as fp:
+                            for line in fp:
+                                if "drm-driver:\ti915" in line:
+                                    is_intel = True
+                                elif line.startswith("drm-engine-"):
+                                    pts = line.split()
+                                    if len(pts) >= 2 and pts[1].isdigit():
+                                        total_ns += int(pts[1])
+                    except Exception:
+                        pass
+                if is_intel:
+                    gpu_devices.setdefault(pid, set()).add("Intel")
+                    new_intel_times[pid] = (now, total_ns)
+                    if pid in self.intel_gpu_times:
+                        prev_time, prev_ns = self.intel_gpu_times[pid]
+                        dt = now - prev_time
+                        if dt > 0.3:
+                            diff_ns = max(0, total_ns - prev_ns)
+                            pct = (diff_ns / (dt * 1_000_000_000)) * 100.0
+                            pct = min(pct, 100.0)
+                            gpu_usage[pid] = max(gpu_usage.get(pid, 0.0), round(pct, 1))
+            except Exception:
+                pass
+
+        self.intel_gpu_times = new_intel_times
+        return gpu_devices, gpu_usage
+
+    def refresh_processes(self):
+        gpu_devices, gpu_usage = self.get_gpu_processes()
+
+        new_data = []
+        gpu_count = 0
+
+        for p in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'memory_info']):
+            try:
+                info = p.info
+                pid = info['pid']
+                name = info['name'] or f"proc_{pid}"
+                cpu = info['cpu_percent'] or 0.0
+                mem_mb = (info['memory_info'].rss / (1024*1024)) if info['memory_info'] else 0.0
+                user = info['username'] or ""
+
+                dev_set = gpu_devices.get(pid, set())
+                g_pct = gpu_usage.get(pid, 0.0)
+
+                if "NVIDIA" in dev_set and "Intel" in dev_set:
+                    dev_str = "Hibrit"
+                    markup = "<span foreground='#cba6f7' weight='bold'>Hibrit</span>"
+                    gpu_count += 1
+                elif "NVIDIA" in dev_set:
+                    dev_str = "NVIDIA"
+                    markup = "<span foreground='#a6e3a1' weight='bold'>NVIDIA</span>"
+                    gpu_count += 1
+                elif "Intel" in dev_set:
+                    dev_str = "Intel"
+                    markup = "<span foreground='#89b4fa' weight='bold'>Intel</span>"
+                    gpu_count += 1
+                else:
+                    dev_str = "-"
+                    markup = "<span foreground='#585b70'>-</span>"
+
+                # Store row: pid, name, cpu, mem_mb, g_pct, dev_str, user, markup
+                new_data.append((pid, name, cpu, mem_mb, g_pct, dev_str, user, markup))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        # Update store
+        self.store.clear()
+        for row in new_data:
+            self.store.append(row)
+
+        self.lbl_proc_count.set_text(f"{len(new_data)} işlem ({gpu_count} GPU)")
+
+    def on_timer_refresh(self):
+        if self.get_visible():
+            self.refresh_metrics()
+            self.refresh_processes()
+        return True
+
+    def on_search_changed(self, entry):
+        self.filter_model.refilter()
+
+    def filter_func(self, model, iter, data):
+        query = self.search_entry.get_text().strip().lower()
+        if not query:
+            return True
+        pid_str = str(model.get_value(iter, 0))
+        name = model.get_value(iter, 1).lower()
+        gpu_dev = model.get_value(iter, 5).lower()
+        user = model.get_value(iter, 6).lower()
+        return (query in name or query in pid_str or query in gpu_dev or query in user)
+
+    def on_selection_changed(self, selection):
+        model, iter = selection.get_selected()
+        if iter:
+            self.selected_pid = model.get_value(iter, 0)
+            self.selected_name = model.get_value(iter, 1)
+            gpu_dev = model.get_value(iter, 5)
+            self.lbl_selected_proc.set_markup(f"Seçili: <b>{self.selected_name}</b> (PID: {self.selected_pid}, GPU: {gpu_dev})")
+            self.btn_kill.set_sensitive(True)
+        else:
+            self.selected_pid = None
+            self.selected_name = ""
+            self.lbl_selected_proc.set_text("Bir işlem seçin")
+            self.btn_kill.set_sensitive(False)
+
+    def kill_selected_process(self, sig):
+        if not self.selected_pid:
+            return
+        try:
+            os.kill(self.selected_pid, sig)
+            self.refresh_processes()
+        except ProcessLookupError:
+            self.refresh_processes()
+        except PermissionError:
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                flags=0,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Yetki Hatası"
+            )
+            dialog.format_secondary_text(f"PID {self.selected_pid} ({self.selected_name}) sonlandırılamadı: Root izinleri gerekebilir.")
+            self.is_showing_dialog = True
+            try:
+                dialog.run()
+            finally:
+                dialog.destroy()
+                self.is_showing_dialog = False
+
+
+class TaskManagerApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.antigravity.taskmanager",
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(CSS_STYLE)
+            screen = Gdk.Screen.get_default()
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            self.window = TaskManagerWindow(self)
+            self.window.connect('destroy', lambda w: setattr(self, 'window', None))
+            self.window.present()
+        else:
+            self.window.close()
+            self.window = None
+
+
+if __name__ == "__main__":
+    app = TaskManagerApp()
+    sys.exit(app.run(sys.argv))

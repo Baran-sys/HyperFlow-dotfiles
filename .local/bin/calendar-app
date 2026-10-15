@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+import sys
+import os
+import signal
+
+# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
+my_pid = os.getpid()
+my_name = os.path.basename(sys.argv[0])
+for pid_str in os.listdir('/proc'):
+    if pid_str.isdigit() and int(pid_str) != my_pid:
+        try:
+            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
+                cmd = pf.read().decode(errors='ignore')
+                if my_name in cmd and 'python' in cmd:
+                    os.kill(int(pid_str), signal.SIGTERM)
+                    sys.exit(0)
+        except Exception:
+            pass
+
+import sys
+import os
+import time
+from datetime import datetime
+import gi
+
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+
+CSS_STYLE = b"""
+window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 12px;
+}
+
+headerbar {
+    background-color: #181825;
+    border-bottom: 1px solid #313244;
+    color: #cdd6f4;
+    padding: 5px 12px;
+}
+
+headerbar button {
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 8px;
+    border: 1px solid #45475a;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+headerbar button:hover {
+    background: #45475a;
+    color: #ffffff;
+}
+
+.clock-card {
+    background: #252538;
+    border: 1px solid #313244;
+    border-radius: 12px;
+    margin: 6px 10px 4px 10px;
+    padding: 8px 12px;
+}
+
+.clock-time {
+    font-size: 26px;
+    font-weight: 800;
+    color: #89b4fa;
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
+.clock-date {
+    font-size: 11px;
+    color: #a6adc8;
+    margin-top: 2px;
+}
+
+calendar {
+    background-color: #252538;
+    color: #cdd6f4;
+    border-radius: 12px;
+    border: 1px solid #313244;
+    margin: 4px 10px 6px 10px;
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+calendar:selected {
+    background-color: #89b4fa;
+    color: #11111b;
+    font-weight: bold;
+    border-radius: 6px;
+}
+
+calendar.header {
+    color: #89b4fa;
+    font-weight: bold;
+}
+
+calendar.button {
+    color: #cdd6f4;
+}
+
+.status-bar {
+    background-color: #181825;
+    border-top: 1px solid #313244;
+    padding: 6px 14px;
+    color: #a6adc8;
+    font-size: 11px;
+}
+"""
+
+DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+MONTHS_TR = [
+    "", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+    "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+]
+
+class CalendarWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(title="Takvim", application=app)
+        self.set_default_size(350, 395)
+        self.set_position(Gtk.WindowPosition.CENTER)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("focus-out-event", self.on_focus_out)
+        self.ready_to_close = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # HeaderBar
+        self.header = Gtk.HeaderBar()
+        self.header.set_show_close_button(True)
+        self.header.set_title("Takvim & Saat")
+        self.set_titlebar(self.header)
+
+        btn_today = Gtk.Button(label="Bugün")
+        btn_today.set_tooltip_text("Bugünün tarihine git")
+        btn_today.connect("clicked", lambda b: self.goto_today())
+        self.header.pack_start(btn_today)
+
+        # Clock card
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        card.get_style_context().add_class("clock-card")
+
+        self.lbl_time = Gtk.Label()
+        self.lbl_time.get_style_context().add_class("clock-time")
+        self.lbl_time.set_halign(Gtk.Align.CENTER)
+        card.pack_start(self.lbl_time, False, False, 0)
+
+        self.lbl_date = Gtk.Label()
+        self.lbl_date.get_style_context().add_class("clock-date")
+        self.lbl_date.set_halign(Gtk.Align.CENTER)
+        card.pack_start(self.lbl_date, False, False, 0)
+
+        main_box.pack_start(card, False, False, 0)
+
+        # Calendar
+        self.calendar = Gtk.Calendar()
+        self.calendar.set_display_options(
+            Gtk.CalendarDisplayOptions.SHOW_HEADING |
+            Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES |
+            Gtk.CalendarDisplayOptions.SHOW_WEEK_NUMBERS
+        )
+        self.calendar.connect("day-selected", self.on_day_selected)
+        main_box.pack_start(self.calendar, True, True, 0)
+
+        # Status Bar
+        self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.status_box.get_style_context().add_class("status-bar")
+        self.lbl_info = Gtk.Label()
+        self.lbl_info.set_ellipsize(Pango.EllipsizeMode.END)
+        self.lbl_info.set_max_width_chars(36)
+        self.status_box.pack_start(self.lbl_info, True, True, 0)
+        main_box.pack_end(self.status_box, False, False, 0)
+
+        self.show_all()
+        self.set_focus(None)
+
+        self.update_clock()
+        self.update_info_label()
+        GLib.timeout_add_seconds(1, self.update_clock)
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
+            self.close()
+            return True
+        return False
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def update_clock(self):
+        now = datetime.now()
+        self.lbl_time.set_text(now.strftime("%H:%M:%S"))
+        day_name = DAYS_TR[now.weekday()]
+        month_name = MONTHS_TR[now.month]
+        self.lbl_date.set_text(f"{now.day} {month_name} {now.year}, {day_name}")
+        self.header.set_subtitle(f"{now.day} {month_name} {now.year}")
+        return True
+
+    def goto_today(self):
+        now = datetime.now()
+        self.calendar.select_month(now.month - 1, now.year)
+        self.calendar.select_day(now.day)
+        self.update_info_label()
+
+    def on_day_selected(self, cal):
+        self.update_info_label()
+
+    def update_info_label(self):
+        year, month, day = self.calendar.get_date()
+        month += 1 # 0-indexed in Gtk.Calendar
+        try:
+            sel_date = datetime(year, month, day)
+            day_name = DAYS_TR[sel_date.weekday()]
+            month_name = MONTHS_TR[month]
+            day_of_year = sel_date.timetuple().tm_yday
+            week_no = sel_date.isocalendar()[1]
+            self.lbl_info.set_text(f"{day} {month_name} {year} ({day_name})  •  {week_no}. Hafta")
+            self.status_box.set_tooltip_text(f"{day} {month_name} {year} ({day_name}) • Yılın {day_of_year}. günü • {week_no}. Hafta")
+        except ValueError:
+            pass
+
+
+class CalendarApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.antigravity.calendarapp",
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(CSS_STYLE)
+            screen = Gdk.Screen.get_default()
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            self.window = CalendarWindow(self)
+            self.window.connect('destroy', lambda w: setattr(self, 'window', None))
+            self.window.present()
+        else:
+            self.window.close()
+            self.window = None
+
+
+if __name__ == "__main__":
+    app = CalendarApp()
+    sys.exit(app.run(sys.argv))

@@ -1,0 +1,777 @@
+#!/usr/bin/env python3
+import sys
+import os
+import signal
+
+# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
+my_pid = os.getpid()
+my_name = os.path.basename(sys.argv[0])
+for pid_str in os.listdir('/proc'):
+    if pid_str.isdigit() and int(pid_str) != my_pid:
+        try:
+            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
+                cmd = pf.read().decode(errors='ignore')
+                if my_name in cmd and 'python' in cmd:
+                    os.kill(int(pid_str), signal.SIGTERM)
+                    sys.exit(0)
+        except Exception:
+            pass
+
+import subprocess
+import re
+import urllib.request
+import urllib.parse
+import hashlib
+import threading
+import math
+import cairo
+import gi
+
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango, GdkPixbuf
+
+CSS_STYLE = b"""
+window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 16px;
+}
+
+headerbar {
+    background-color: #181825;
+    border-bottom: 1px solid #313244;
+    color: #cdd6f4;
+    padding: 3px 10px;
+    min-height: 38px;
+}
+
+headerbar .title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #cdd6f4;
+}
+
+headerbar .subtitle {
+    font-size: 11px;
+    color: #89b4fa;
+}
+
+/* Material 3 Media Card */
+.media-card {
+    background: #252538;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    margin: 6px 12px 2px 12px;
+    padding: 10px 14px 8px 14px;
+}
+
+.art-box {
+    background-color: #181825;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-height: 84px;
+    min-width: 84px;
+}
+
+.track-title {
+    font-size: 14px;
+    font-weight: 800;
+    color: #cdd6f4;
+    margin-top: 6px;
+}
+
+.track-artist {
+    font-size: 12px;
+    font-weight: 600;
+    color: #89b4fa;
+    margin-top: 1px;
+}
+
+.track-album {
+    font-size: 11px;
+    color: #a6adc8;
+    margin-top: 1px;
+}
+
+/* Material 3 Seek Bar */
+scale {
+    margin: 2px 0;
+    padding: 0;
+}
+
+scale trough {
+    background-color: #313244;
+    border-radius: 4px;
+    min-height: 6px;
+    border: none;
+}
+
+scale highlight {
+    background-color: #89b4fa;
+    border-radius: 4px;
+    min-height: 6px;
+}
+
+scale slider {
+    background-color: #cdd6f4;
+    border-radius: 50%;
+    min-width: 14px;
+    min-height: 14px;
+    margin: -4px;
+    border: 2px solid #1e1e2e;
+}
+
+scale slider:hover {
+    background-color: #ffffff;
+    min-width: 16px;
+    min-height: 16px;
+    margin: -5px;
+}
+
+.time-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #a6adc8;
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
+/* Material 3 Expressive Media Buttons */
+.btn-m3-play {
+    background-color: #89b4fa;
+    color: #11111b;
+    border-radius: 26px;
+    min-width: 52px;
+    min-height: 52px;
+    border: none;
+    padding: 0;
+}
+
+.btn-m3-play:hover {
+    background-color: #b4befe;
+    box-shadow: 0 4px 14px rgba(137, 180, 250, 0.45);
+}
+
+.btn-m3-play:active {
+    background-color: #74c7ec;
+    box-shadow: 0 2px 6px rgba(137, 180, 250, 0.25);
+}
+
+.btn-m3-tonal {
+    background-color: #313244;
+    color: #cdd6f4;
+    border-radius: 20px;
+    min-width: 40px;
+    min-height: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0;
+}
+
+.btn-m3-tonal:hover {
+    background-color: #45475a;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.btn-m3-tonal:active {
+    background-color: #585b70;
+}
+
+.btn-m3-ghost {
+    background-color: transparent;
+    color: #6c7086;
+    border-radius: 50%;
+    min-width: 36px;
+    min-height: 36px;
+    border: 1px solid transparent;
+    padding: 0;
+}
+
+.btn-m3-ghost:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #cdd6f4;
+}
+
+.btn-m3-ghost.active {
+    background-color: #313244;
+    color: #89b4fa;
+    border: 1px solid rgba(137, 180, 250, 0.4);
+    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+    border-radius: 50%;
+}
+
+.btn-m3-ghost.active:hover {
+    background-color: #45475a;
+    color: #b4befe;
+}
+
+.btn-m3-pill {
+    background-color: #313244;
+    color: #cdd6f4;
+    border-radius: 12px;
+    padding: 7px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-m3-pill:hover {
+    background-color: #45475a;
+    color: #ffffff;
+}
+
+.status-bar {
+    background-color: #181825;
+    border-top: 1px solid #313244;
+    padding: 4px 12px;
+    color: #a6adc8;
+    font-size: 11px;
+    min-height: 30px;
+}
+
+.player-chip {
+    background-color: #252538;
+    color: #a6e3a1;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.empty-icon-circle {
+    background-color: #252538;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    min-width: 68px;
+    min-height: 68px;
+    margin: 0;
+    padding: 10px;
+}
+"""
+
+class MediaPlayerWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(title="Medya Oynatıcı", application=app)
+        self.set_default_size(310, 400)
+        self.set_position(Gtk.WindowPosition.CENTER)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("focus-out-event", self.on_focus_out)
+        self.ready_to_close = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        self.is_seeking = False
+        self.track_length = 0
+        self.current_art_url = None
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # HeaderBar
+        self.header = Gtk.HeaderBar()
+        self.header.set_show_close_button(True)
+        self.header.set_title("Medya Oynatıcı")
+        self.header.set_subtitle("MPRIS2 Denetleyici")
+        self.set_titlebar(self.header)
+
+        # Content Box
+        self.content_stack = Gtk.Stack()
+        self.content_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        main_box.pack_start(self.content_stack, True, True, 0)
+
+        # Page 1: Empty state (Material 3 Style)
+        box_empty = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box_empty.set_valign(Gtk.Align.CENTER)
+        box_empty.set_halign(Gtk.Align.CENTER)
+        box_empty.set_margin_start(16)
+        box_empty.set_margin_end(16)
+
+        icon_box = Gtk.Box()
+        icon_box.set_halign(Gtk.Align.CENTER)
+        icon_box.get_style_context().add_class("empty-icon-circle")
+        img_no_media = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+        img_no_media.set_pixel_size(40)
+        icon_box.pack_start(img_no_media, True, True, 0)
+        box_empty.pack_start(icon_box, False, False, 0)
+
+        lbl_empty_title = Gtk.Label()
+        lbl_empty_title.set_markup("<span size='large' weight='bold' foreground='#cdd6f4'>Medya Oynatıcı Boşta</span>")
+        box_empty.pack_start(lbl_empty_title, False, False, 0)
+
+        lbl_empty_desc = Gtk.Label()
+        lbl_empty_desc.set_markup("<small><span foreground='#a6adc8'>Spotify veya bir medya oynatıcı açtığınızda\nburadan kontrol edebilirsiniz.</span></small>")
+        lbl_empty_desc.set_justify(Gtk.Justification.CENTER)
+        box_empty.pack_start(lbl_empty_desc, False, False, 0)
+
+
+
+        self.content_stack.add_named(box_empty, "empty")
+
+        # Page 2: Active player
+        self.box_player = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.build_player_ui(self.box_player)
+        self.content_stack.add_named(self.box_player, "player")
+
+        # Bottom Bar (Material 3 Status & Volume)
+        self.status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.status_bar.get_style_context().add_class("status-bar")
+
+        self.chip_player = Gtk.Label()
+        self.chip_player.get_style_context().add_class("player-chip")
+        self.chip_player.set_markup("<span foreground='#a6e3a1'>●</span> Medya")
+        self.status_bar.pack_start(self.chip_player, False, False, 0)
+
+        self.lbl_footer = Gtk.Label(label="Hazır")
+        self.lbl_footer.set_ellipsize(Pango.EllipsizeMode.END)
+        self.status_bar.pack_start(self.lbl_footer, True, True, 0)
+
+        # Volume Indicator / Quick Control
+        vol_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        vol_box.add_events(Gdk.EventMask.SCROLL_MASK)
+        vol_box.connect("scroll-event", self.on_volume_scroll)
+        self.img_vol = Gtk.Image.new_from_icon_name("audio-volume-medium-symbolic", Gtk.IconSize.BUTTON)
+        self.img_vol.set_pixel_size(14)
+        self.lbl_volume = Gtk.Label(label="%100")
+        self.lbl_volume.get_style_context().add_class("time-label")
+        vol_box.pack_start(self.img_vol, False, False, 0)
+        vol_box.pack_start(self.lbl_volume, False, False, 0)
+        self.status_bar.pack_end(vol_box, False, False, 0)
+
+        main_box.pack_end(self.status_bar, False, False, 0)
+
+        self.show_all()
+        self.set_focus(None)
+
+        def _init_media():
+            if os.environ.get("MEDIA_PREVIEW") == "1":
+                self.content_stack.set_visible_child_name("player")
+                self.header.set_subtitle("Spotify  •  Çalıyor")
+                self.chip_player.set_markup("<span foreground='#a6e3a1'>●</span> Spotify")
+                self.lbl_title.set_text("Drive, Don't Talk")
+                self.lbl_artist.set_text("Makeout Reef")
+                self.lbl_album.set_text("Star Power")
+                self.img_play.set_from_icon_name("media-playback-pause-symbolic", Gtk.IconSize.BUTTON)
+                self.btn_shuffle.get_style_context().add_class("active")
+                self.scale_time.set_value(42.0)
+                self.lbl_curr_time.set_text("1:14")
+                self.lbl_tot_time.set_text("2:55")
+                self.lbl_footer.set_text("Makeout Reef - Drive, Don't Talk")
+                self.lbl_volume.set_text("%80")
+                return False
+            self.refresh_media_state()
+            self.refresh_volume()
+            return False
+
+        GLib.idle_add(_init_media)
+        if os.environ.get("MEDIA_PREVIEW") != "1":
+            GLib.timeout_add_seconds(1, self.refresh_media_state)
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
+            self.close()
+            return True
+        return False
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def build_player_ui(self, box):
+        # Card with Art & Info
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        card.get_style_context().add_class("media-card")
+
+        # Icon / Album art
+        art_center = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        art_center.set_halign(Gtk.Align.CENTER)
+        self.img_art = Gtk.Image.new_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+        self.img_art.set_pixel_size(84)
+        self.img_art.get_style_context().add_class("art-box")
+        art_center.pack_start(self.img_art, False, False, 0)
+        card.pack_start(art_center, False, False, 2)
+
+        # Track title
+        self.lbl_title = Gtk.Label()
+        self.lbl_title.get_style_context().add_class("track-title")
+        self.lbl_title.set_ellipsize(Pango.EllipsizeMode.END)
+        self.lbl_title.set_max_width_chars(28)
+        card.pack_start(self.lbl_title, False, False, 0)
+
+        # Track artist
+        self.lbl_artist = Gtk.Label()
+        self.lbl_artist.get_style_context().add_class("track-artist")
+        self.lbl_artist.set_ellipsize(Pango.EllipsizeMode.END)
+        self.lbl_artist.set_max_width_chars(32)
+        card.pack_start(self.lbl_artist, False, False, 0)
+
+        # Track album
+        self.lbl_album = Gtk.Label()
+        self.lbl_album.get_style_context().add_class("track-album")
+        self.lbl_album.set_ellipsize(Pango.EllipsizeMode.END)
+        self.lbl_album.set_max_width_chars(34)
+        card.pack_start(self.lbl_album, False, False, 0)
+
+        box.pack_start(card, False, False, 0)
+
+        # Timeline Slider & Timestamps
+        time_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        time_box.set_margin_start(16)
+        time_box.set_margin_end(16)
+
+        self.scale_time = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+        self.scale_time.set_draw_value(False)
+        self.scale_time.connect("change-value", self.on_time_scale_change)
+        time_box.pack_start(self.scale_time, False, False, 0)
+
+        lbls_time = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.lbl_curr_time = Gtk.Label(label="0:00")
+        self.lbl_curr_time.get_style_context().add_class("time-label")
+        self.lbl_tot_time = Gtk.Label(label="0:00")
+        self.lbl_tot_time.get_style_context().add_class("time-label")
+        lbls_time.pack_start(self.lbl_curr_time, False, False, 0)
+        lbls_time.pack_end(self.lbl_tot_time, False, False, 0)
+        time_box.pack_start(lbls_time, False, False, 0)
+
+        box.pack_start(time_box, False, False, 0)
+
+        # Material 3 Media Controls: [ Shuffle ] [ Prev ] [ Play/Pause ] [ Next ] [ Repeat ]
+        ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        ctrl_box.set_halign(Gtk.Align.CENTER)
+        ctrl_box.set_valign(Gtk.Align.CENTER)
+        ctrl_box.set_margin_top(6)
+        ctrl_box.set_margin_bottom(8)
+
+        # 1. Shuffle Button
+        self.btn_shuffle = Gtk.Button()
+        self.img_shuffle = Gtk.Image.new_from_icon_name("media-playlist-shuffle-symbolic", Gtk.IconSize.BUTTON)
+        self.img_shuffle.set_pixel_size(15)
+        self.btn_shuffle.set_image(self.img_shuffle)
+        self.btn_shuffle.get_style_context().add_class("btn-m3-ghost")
+        self.btn_shuffle.set_tooltip_text("Karışık Çalma (Açık/Kapalı)")
+        self.btn_shuffle.connect("clicked", lambda b: self.toggle_shuffle())
+        self.btn_shuffle.set_valign(Gtk.Align.CENTER)
+        ctrl_box.pack_start(self.btn_shuffle, False, False, 0)
+
+        # 2. Previous Button
+        self.btn_prev = Gtk.Button()
+        self.img_prev = Gtk.Image.new_from_icon_name("media-skip-backward-symbolic", Gtk.IconSize.BUTTON)
+        self.img_prev.set_pixel_size(16)
+        self.btn_prev.set_image(self.img_prev)
+        self.btn_prev.get_style_context().add_class("btn-m3-tonal")
+        self.btn_prev.set_tooltip_text("Önceki Parça")
+        self.btn_prev.connect("clicked", lambda b: subprocess.run(["playerctl", "previous"]))
+        self.btn_prev.set_valign(Gtk.Align.CENTER)
+        ctrl_box.pack_start(self.btn_prev, False, False, 0)
+
+        # 3. Play / Pause Button (M3 Prominent FAB)
+        self.btn_play = Gtk.Button()
+        self.img_play = Gtk.Image.new_from_icon_name("media-playback-start-symbolic", Gtk.IconSize.BUTTON)
+        self.img_play.set_pixel_size(24)
+        self.btn_play.set_image(self.img_play)
+        self.btn_play.get_style_context().add_class("btn-m3-play")
+        self.btn_play.set_tooltip_text("Oynat / Duraklat")
+        self.btn_play.connect("clicked", lambda b: subprocess.run(["playerctl", "play-pause"]))
+        self.btn_play.set_valign(Gtk.Align.CENTER)
+        ctrl_box.pack_start(self.btn_play, False, False, 0)
+
+        # 4. Next Button
+        self.btn_next = Gtk.Button()
+        self.img_next = Gtk.Image.new_from_icon_name("media-skip-forward-symbolic", Gtk.IconSize.BUTTON)
+        self.img_next.set_pixel_size(16)
+        self.btn_next.set_image(self.img_next)
+        self.btn_next.get_style_context().add_class("btn-m3-tonal")
+        self.btn_next.set_tooltip_text("Sonraki Parça")
+        self.btn_next.connect("clicked", lambda b: subprocess.run(["playerctl", "next"]))
+        self.btn_next.set_valign(Gtk.Align.CENTER)
+        ctrl_box.pack_start(self.btn_next, False, False, 0)
+
+        # 5. Repeat / Loop Button
+        self.btn_loop = Gtk.Button()
+        self.img_loop = Gtk.Image.new_from_icon_name("media-playlist-repeat-symbolic", Gtk.IconSize.BUTTON)
+        self.img_loop.set_pixel_size(15)
+        self.btn_loop.set_image(self.img_loop)
+        self.btn_loop.get_style_context().add_class("btn-m3-ghost")
+        self.btn_loop.set_tooltip_text("Tekrar Çalma (Kapalı / Liste / Parça)")
+        self.btn_loop.connect("clicked", lambda b: self.cycle_loop())
+        self.btn_loop.set_valign(Gtk.Align.CENTER)
+        ctrl_box.pack_start(self.btn_loop, False, False, 0)
+
+        box.pack_start(ctrl_box, False, False, 0)
+
+    def toggle_shuffle(self):
+        try:
+            subprocess.run(["playerctl", "shuffle", "Toggle"], timeout=0.3)
+            GLib.timeout_add(100, self.update_playback_modes)
+        except Exception:
+            pass
+
+    def cycle_loop(self):
+        try:
+            res_loop = subprocess.run(["playerctl", "loop"], capture_output=True, text=True, timeout=0.2)
+            curr = res_loop.stdout.strip().capitalize() if res_loop.returncode == 0 else "None"
+            next_state = "Playlist" if curr == "None" else ("Track" if curr == "Playlist" else "None")
+            subprocess.run(["playerctl", "loop", next_state], timeout=0.3)
+            GLib.timeout_add(100, self.update_playback_modes)
+        except Exception:
+            pass
+
+    def update_playback_modes(self):
+        # Shuffle
+        try:
+            res_shuf = subprocess.run(["playerctl", "shuffle"], capture_output=True, text=True, timeout=0.2)
+            is_shuf = (res_shuf.stdout.strip().lower() == "on") if res_shuf.returncode == 0 else False
+            ctx_shuf = self.btn_shuffle.get_style_context()
+            if is_shuf:
+                ctx_shuf.add_class("active")
+                self.btn_shuffle.set_tooltip_text("Karışık Çalma: Açık")
+            else:
+                ctx_shuf.remove_class("active")
+                self.btn_shuffle.set_tooltip_text("Karışık Çalma: Kapalı")
+        except Exception:
+            pass
+
+        # Loop
+        try:
+            res_loop = subprocess.run(["playerctl", "loop"], capture_output=True, text=True, timeout=0.2)
+            loop_val = res_loop.stdout.strip().capitalize() if res_loop.returncode == 0 else "None"
+            ctx_loop = self.btn_loop.get_style_context()
+            if loop_val == "Track":
+                ctx_loop.add_class("active")
+                self.img_loop.set_from_icon_name("media-playlist-repeat-song-symbolic", Gtk.IconSize.BUTTON)
+                self.btn_loop.set_tooltip_text("Tekrar: Tek Parça")
+            elif loop_val == "Playlist":
+                ctx_loop.add_class("active")
+                self.img_loop.set_from_icon_name("media-playlist-repeat-symbolic", Gtk.IconSize.BUTTON)
+                self.btn_loop.set_tooltip_text("Tekrar: Çalma Listesi")
+            else:
+                ctx_loop.remove_class("active")
+                self.img_loop.set_from_icon_name("media-playlist-repeat-symbolic", Gtk.IconSize.BUTTON)
+                self.btn_loop.set_tooltip_text("Tekrar: Kapalı")
+        except Exception:
+            pass
+
+    def on_volume_scroll(self, widget, event):
+        if event.direction == Gdk.ScrollDirection.UP:
+            subprocess.run(["playerctl", "volume", "0.05+"], timeout=0.2)
+            self.refresh_volume()
+            return True
+        elif event.direction == Gdk.ScrollDirection.DOWN:
+            subprocess.run(["playerctl", "volume", "0.05-"], timeout=0.2)
+            self.refresh_volume()
+            return True
+        return False
+
+    def refresh_volume(self):
+        try:
+            res = subprocess.run(["playerctl", "volume"], capture_output=True, text=True, timeout=0.2)
+            if res.returncode == 0 and res.stdout.strip():
+                vol_f = float(res.stdout.strip())
+                vol_pct = int(round(vol_f * 100))
+                self.lbl_volume.set_text(f"%{vol_pct}")
+                icon_name = "audio-volume-muted-symbolic" if vol_pct == 0 else ("audio-volume-low-symbolic" if vol_pct < 35 else ("audio-volume-medium-symbolic" if vol_pct < 70 else "audio-volume-high-symbolic"))
+                self.img_vol.set_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+                return
+        except Exception:
+            pass
+        # Fallback to pamixer
+        try:
+            res = subprocess.run(["pamixer", "--get-volume"], capture_output=True, text=True, timeout=0.2)
+            if res.returncode == 0:
+                vol_pct = int(res.stdout.strip())
+                self.lbl_volume.set_text(f"%{vol_pct}")
+                icon_name = "audio-volume-low-symbolic" if vol_pct < 35 else ("audio-volume-medium-symbolic" if vol_pct < 70 else "audio-volume-high-symbolic")
+                self.img_vol.set_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+        except Exception:
+            pass
+
+    def on_time_scale_change(self, scale, scroll_type, value):
+        if self.track_length > 0:
+            target_sec = int((value / 100.0) * self.track_length)
+            subprocess.run(["playerctl", "position", str(target_sec)])
+        return False
+
+    def format_seconds(self, sec):
+        sec = max(0, int(sec))
+        m, s = divmod(sec, 60)
+        h, m = divmod(m, 60)
+        if h > 0:
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"
+
+    def load_rounded_cover(self, file_path):
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(file_path, 84, 84, True)
+            w, h, radius = pixbuf.get_width(), pixbuf.get_height(), 14
+            surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+            ctx = cairo.Context(surface)
+            ctx.arc(w - radius, radius, radius, -math.pi/2, 0)
+            ctx.arc(w - radius, h - radius, radius, 0, math.pi/2)
+            ctx.arc(radius, h - radius, radius, math.pi/2, math.pi)
+            ctx.arc(radius, radius, radius, math.pi, 3*math.pi/2)
+            ctx.close_path()
+            ctx.clip()
+            Gdk.cairo_set_source_pixbuf(ctx, pixbuf, 0, 0)
+            ctx.paint()
+            return Gdk.pixbuf_get_from_surface(surface, 0, 0, w, h)
+        except Exception:
+            try:
+                return GdkPixbuf.Pixbuf.new_from_file_at_scale(file_path, 84, 84, True)
+            except Exception:
+                return None
+
+    def update_art_from_file(self, file_path, art_url):
+        if self.current_art_url == art_url:
+            rounded = self.load_rounded_cover(file_path)
+            if rounded:
+                self.img_art.set_from_pixbuf(rounded)
+            else:
+                self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+
+    def fetch_art_async(self, art_url):
+        cache_dir = os.path.expanduser("~/.cache/media-player-art")
+        os.makedirs(cache_dir, exist_ok=True)
+        url_hash = hashlib.md5(art_url.encode('utf-8')).hexdigest()
+        cache_path = os.path.join(cache_dir, f"{url_hash}.jpg")
+
+        if os.path.exists(cache_path) and os.path.getsize(cache_path) > 0:
+            self.update_art_from_file(cache_path, art_url)
+            return
+
+        def _worker():
+            try:
+                req = urllib.request.Request(art_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = resp.read()
+                    with open(cache_path, "wb") as f:
+                        f.write(data)
+                GLib.idle_add(self.update_art_from_file, cache_path, art_url)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def refresh_media_state(self):
+        try:
+            status_res = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=0.3)
+            if status_res.returncode != 0:
+                self.content_stack.set_visible_child_name("empty")
+                self.header.set_subtitle("Aktif Oynatıcı Yok")
+                self.chip_player.set_markup("<span foreground='#6c7086'>○</span> Boşta")
+                self.lbl_footer.set_text("Medya oynatıcı bekleniyor...")
+                self.current_art_url = None
+                self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+                return True
+
+            status = status_res.stdout.strip()
+
+            # Metadata
+            meta_res = subprocess.run(
+                ["playerctl", "metadata", "--format", "{{playerName}}///{{title}}///{{artist}}///{{album}}///{{mpris:length}}///{{position}}///{{mpris:artUrl}}"],
+                capture_output=True, text=True, timeout=0.3
+            )
+            parts = meta_res.stdout.strip().split("///")
+            if len(parts) >= 6:
+                player_name, title, artist, album, length_raw, pos_raw = parts[:6]
+                art_url = parts[6].strip() if len(parts) > 6 else ""
+
+                self.content_stack.set_visible_child_name("player")
+                status_icon = "●" if status == "Playing" else "⏸"
+                status_color = "#a6e3a1" if status == "Playing" else "#f9e2af"
+                status_text = "Çalıyor" if status == "Playing" else "Duraklatıldı"
+                self.header.set_subtitle(f"{player_name.capitalize()}  •  {status_text}")
+                self.chip_player.set_markup(f"<span foreground='{status_color}'>{status_icon}</span> {player_name.capitalize()}")
+                self.lbl_title.set_text(title or "Bilinmeyen Başlık")
+                self.lbl_artist.set_text(artist or "Bilinmeyen Sanatçı")
+                self.lbl_album.set_text(album or "")
+
+                # Play/Pause Icon
+                icon_name = "media-playback-pause-symbolic" if status == "Playing" else "media-playback-start-symbolic"
+                self.img_play.set_from_icon_name(icon_name, Gtk.IconSize.BUTTON)
+
+                # Playback modes (Shuffle & Loop)
+                self.update_playback_modes()
+
+                # Album Cover Art
+                if art_url != self.current_art_url:
+                    self.current_art_url = art_url
+                    if art_url:
+                        if art_url.startswith("file://"):
+                            local_file = urllib.parse.unquote(art_url[7:])
+                            self.update_art_from_file(local_file, art_url)
+                        elif art_url.startswith("http://") or art_url.startswith("https://"):
+                            self.fetch_art_async(art_url)
+                        else:
+                            self.update_art_from_file(art_url, art_url)
+                    else:
+                        self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+
+                # Position & Length (MPRIS specifies length and position in microseconds)
+                try:
+                    length_sec = int(length_raw) / 1000000.0 if (length_raw and length_raw.isdigit()) else 0
+                    if pos_raw:
+                        pos_val = float(pos_raw)
+                        pos_sec = (pos_val / 1000000.0) if pos_val > 10000 else pos_val
+                    else:
+                        pos_sec = 0
+                    self.track_length = length_sec
+
+                    if length_sec > 0:
+                        pct = min(max((pos_sec / length_sec) * 100.0, 0.0), 100.0)
+                        self.scale_time.set_value(pct)
+                        self.lbl_curr_time.set_text(self.format_seconds(pos_sec))
+                        self.lbl_tot_time.set_text(self.format_seconds(length_sec))
+                        self.scale_time.set_sensitive(True)
+                    else:
+                        self.scale_time.set_value(0)
+                        self.lbl_curr_time.set_text(self.format_seconds(pos_sec))
+                        self.lbl_tot_time.set_text("--:--")
+                        self.scale_time.set_sensitive(False)
+                except Exception:
+                    pass
+
+                self.lbl_footer.set_text(f"{artist} - {title}" if artist else title)
+            else:
+                self.content_stack.set_visible_child_name("empty")
+                self.current_art_url = None
+                self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+        except Exception:
+            self.content_stack.set_visible_child_name("empty")
+            self.current_art_url = None
+            self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
+
+        return True
+
+
+class MediaPlayerApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.antigravity.mediaplayer",
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(CSS_STYLE)
+            screen = Gdk.Screen.get_default()
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            self.window = MediaPlayerWindow(self)
+            self.window.connect('destroy', lambda w: setattr(self, 'window', None))
+            self.window.present()
+        else:
+            self.window.close()
+            self.window = None
+
+
+if __name__ == "__main__":
+    app = MediaPlayerApp()
+    sys.exit(app.run(sys.argv))

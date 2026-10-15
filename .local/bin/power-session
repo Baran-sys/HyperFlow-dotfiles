@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+import sys
+import os
+import signal
+
+# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
+my_pid = os.getpid()
+my_name = os.path.basename(sys.argv[0])
+for pid_str in os.listdir("/proc"):
+    if pid_str.isdigit() and int(pid_str) != my_pid:
+        try:
+            with open(f"/proc/{pid_str}/cmdline", "rb") as pf:
+                cmd = pf.read().decode(errors="ignore")
+                if my_name in cmd and "python" in cmd:
+                    os.kill(int(pid_str), signal.SIGTERM)
+                    sys.exit(0)
+        except Exception:
+            pass
+
+import subprocess
+import time
+import gi
+
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, GLib, Gio
+
+CSS_STYLE = b"""
+window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 12px;
+}
+
+.session-container {
+    padding: 10px 12px 6px 12px;
+}
+
+.session-btn {
+    background-color: #252538;
+    border: 1px solid #313244;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 0 3px;
+    color: #cdd6f4;
+    transition: all 120ms ease;
+}
+
+.session-btn:hover {
+    background-color: #313244;
+    border-color: #89b4fa;
+    color: #89b4fa;
+}
+
+.session-btn:focus {
+    border-color: #89b4fa;
+    box-shadow: none;
+}
+
+.session-btn-active {
+    background-color: rgba(166, 227, 161, 0.18);
+    border-color: #a6e3a1;
+    color: #a6e3a1;
+}
+
+.session-btn-active:hover {
+    background-color: rgba(166, 227, 161, 0.28);
+    border-color: #a6e3a1;
+    color: #a6e3a1;
+}
+
+.btn-icon {
+    font-size: 20px;
+}
+
+.btn-icon {
+    font-family: 'JetBrainsMono Nerd Font', 'Symbols Nerd Font', monospace;
+    font-size: 20px;
+}
+
+.status-bar {
+    padding: 2px 10px 8px 10px;
+    color: #a6adc8;
+    font-size: 11px;
+}
+"""
+
+def get_uptime_str():
+    try:
+        with open("/proc/uptime", "r") as f:
+            total_seconds = float(f.readline().split()[0])
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        if hours > 0:
+            return f"  Açık kalma: {hours} sa {minutes} dk"
+        else:
+            return f"  Açık kalma: {minutes} dk"
+    except Exception:
+        return "  Açık kalma: Hazır"
+
+class PowerSessionWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(title="Güç Menüsü", application=app)
+        self.set_default_size(346, 102)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("focus-out-event", self.on_focus_out)
+        self.ready_to_close = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # Buttons Row
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        btn_box.get_style_context().add_class("session-container")
+        btn_box.set_halign(Gtk.Align.CENTER)
+        main_box.pack_start(btn_box, True, True, 0)
+
+        # 1. Kapat (Shutdown)
+        btn_shutdown = self.create_icon_button(
+            icon="󰐥",
+            tooltip="Sistemi Kapat (K/S)",
+            action=self.action_shutdown
+        )
+        btn_box.pack_start(btn_shutdown, False, False, 0)
+
+        # 2. Yeniden Başlat (Reboot)
+        btn_reboot = self.create_icon_button(
+            icon="",
+            tooltip="Yeniden Başlat (Y/R)",
+            action=self.action_reboot
+        )
+        btn_box.pack_start(btn_reboot, False, False, 0)
+
+        # 3. Uyku Modu (Suspend)
+        btn_suspend = self.create_icon_button(
+            icon="󰤄",
+            tooltip="Uyku Modu (U)",
+            action=self.action_suspend
+        )
+        btn_box.pack_start(btn_suspend, False, False, 0)
+
+        # 4. Ekranı Kilitle (Lock)
+        btn_lock = self.create_icon_button(
+            icon="󰌾",
+            tooltip="Ekranı Kilitle (L)",
+            action=self.action_lock
+        )
+        btn_box.pack_start(btn_lock, False, False, 0)
+
+        # 5. Caffeine (Ekran Kilidini Durdur)
+        self.btn_caffeine = self.create_icon_button(
+            icon="",
+            tooltip="Caffeine Modu (C)",
+            action=self.action_toggle_caffeine
+        )
+        self.update_caffeine_ui()
+        btn_box.pack_start(self.btn_caffeine, False, False, 0)
+
+        # 6. Oturumu Kapat (Logoff)
+        btn_logout = self.create_icon_button(
+            icon="",
+            tooltip="Oturumu Kapat (O/E)",
+            action=self.action_logout
+        )
+        btn_box.pack_start(btn_logout, False, False, 0)
+
+        # Status Bar: Uptime
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        status_box.get_style_context().add_class("status-bar")
+        status_box.set_halign(Gtk.Align.CENTER)
+        lbl_uptime = Gtk.Label(label=get_uptime_str())
+        status_box.pack_start(lbl_uptime, True, True, 0)
+        main_box.pack_end(status_box, False, False, 0)
+
+        self.show_all()
+        self.set_focus(None)
+
+    def is_caffeine_active(self):
+        res = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True)
+        return res.returncode != 0
+
+    def update_caffeine_ui(self):
+        active = self.is_caffeine_active()
+        ctx = self.btn_caffeine.get_style_context()
+        if active:
+            if not ctx.has_class("session-btn-active"):
+                ctx.add_class("session-btn-active")
+            self.btn_caffeine.set_tooltip_text("Caffeine Aktif (Ekran Kilidi Kapalı) - [C]")
+        else:
+            if ctx.has_class("session-btn-active"):
+                ctx.remove_class("session-btn-active")
+            self.btn_caffeine.set_tooltip_text("Caffeine Kapalı (Tıkla: Ekran Kilidini Durdur) - [C]")
+
+    def action_toggle_caffeine(self):
+        subprocess.run(["/home/bren/.local/bin/toggle-caffeine"])
+        self.update_caffeine_ui()
+
+    def create_icon_button(self, icon, tooltip, action):
+        btn = Gtk.Button()
+        btn.get_style_context().add_class("session-btn")
+        btn.set_tooltip_text(tooltip)
+        btn.connect("clicked", lambda b: action())
+
+        lbl_icon = Gtk.Label()
+        lbl_icon.set_markup(f"<span font_family='JetBrainsMono Nerd Font' font='18'>{icon}</span>")
+        lbl_icon.get_style_context().add_class("btn-icon")
+        lbl_icon.set_valign(Gtk.Align.CENTER)
+        lbl_icon.set_halign(Gtk.Align.CENTER)
+        btn.add(lbl_icon)
+        return btn
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
+            self.close()
+            return True
+        return False
+
+    def on_key_press(self, widget, event):
+        val = event.keyval
+        if val == Gdk.KEY_Escape:
+            self.close()
+            return True
+        elif val in (Gdk.KEY_k, Gdk.KEY_K, Gdk.KEY_s, Gdk.KEY_S):
+            self.action_shutdown()
+            return True
+        elif val in (Gdk.KEY_y, Gdk.KEY_Y, Gdk.KEY_r, Gdk.KEY_R):
+            self.action_reboot()
+            return True
+        elif val in (Gdk.KEY_l, Gdk.KEY_L):
+            self.action_lock()
+            return True
+        elif val in (Gdk.KEY_c, Gdk.KEY_C):
+            self.action_toggle_caffeine()
+            return True
+        elif val in (Gdk.KEY_o, Gdk.KEY_O, Gdk.KEY_e, Gdk.KEY_E):
+            self.action_logout()
+            return True
+        elif val in (Gdk.KEY_u, Gdk.KEY_U):
+            self.action_suspend()
+            return True
+        return False
+
+    def action_shutdown(self):
+        self.close()
+        subprocess.Popen(["systemctl", "poweroff"])
+
+    def action_reboot(self):
+        self.close()
+        subprocess.Popen(["systemctl", "reboot"])
+
+    def action_lock(self):
+        self.close()
+        subprocess.Popen(["hyprlock"])
+
+    def action_logout(self):
+        self.close()
+        subprocess.Popen(["hyprctl", "dispatch", "exit"])
+
+    def action_suspend(self):
+        self.close()
+        subprocess.Popen(["systemctl", "suspend"])
+
+
+class PowerSessionApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.antigravity.powersession",
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(CSS_STYLE)
+            screen = Gdk.Screen.get_default()
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            self.window = PowerSessionWindow(self)
+            self.window.connect('destroy', lambda w: setattr(self, 'window', None))
+            self.window.present()
+        else:
+            self.window.close()
+            self.window = None
+
+
+if __name__ == "__main__":
+    app = PowerSessionApp()
+    sys.exit(app.run(sys.argv))

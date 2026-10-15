@@ -1,0 +1,106 @@
+configuration {
+    font: "JetBrainsMono Nerd Font 13";
+    show-icons: false;
+    hover-select: true;
+    me-select-entry: "";
+    me-accept-entry: "MousePrimary";
+}
+
+* {
+    bg-col:  #1e1e2ee6;
+    bg-col-light: #252538;
+    border-col: #45475a;
+    selected-col: #89b4fa;
+    blue: #89b4fa;
+    fg-col: #cdd6f4;
+    fg-col2: #11111b;
+    grey: #6c7086;
+    accent: #89b4fa;
+
+    width: 620;
+    font: "JetBrainsMono Nerd Font 13";
+}
+
+element-text {
+    background-color: inherit;
+    text-color:       inherit;
+}
+
+window {
+    height: 420px;
+    border: 1px;
+    border-color: @border-col;
+    border-radius: 16px;
+    background-color: @bg-col;
+    location: north;
+    anchor: north;
+    y-offset: 160px;
+}
+
+mainbox {
+    background-color: transparent;
+    spacing: 0px;
+    padding: 0px;
+    children: [inputbar, listview];
+}
+
+inputbar {
+    children: [prompt, entry];
+    background-color: transparent;
+    border-radius: 0px;
+    padding: 14px 18px;
+    border: 0 0 1px 0;
+    border-color: #313244;
+}
+
+prompt {
+    background-color: transparent;
+    padding: 0px 10px 0px 4px;
+    text-color: @blue;
+    font: "JetBrainsMono Nerd Font 16";
+}
+
+entry {
+    background-color: transparent;
+    text-color: @fg-col;
+    placeholder: "Kopyalama Geçmişi...";
+    placeholder-color: @grey;
+    cursor: text;
+    font: "JetBrainsMono Nerd Font 14";
+}
+
+listview {
+    border: 0px;
+    padding: 8px 10px;
+    margin: 0px;
+    columns: 1;
+    lines: 7;
+    background-color: transparent;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+}
+
+element {
+    padding: 8px 14px;
+    background-color: transparent;
+    text-color: @fg-col;
+    border-radius: 10px;
+    margin: 2px 4px;
+    spacing: 12px;
+}
+
+element-text {
+    vertical-align: 0.5;
+    text-color: inherit;
+    font: "JetBrainsMono Nerd Font 12";
+}
+
+element selected {
+    background-color: @selected-col;
+    text-color: @fg-col2;
+}
+
+element selected element-text {
+    text-color: #11111b;
+}

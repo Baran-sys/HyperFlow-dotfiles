@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Usage: change-brightness up|down|<percent>
+# Root gerektirmez: systemd-logind SetBrightness API'sini kullanır.
+# Hybrid (Intel + NVIDIA) laptoplar için tüm backlight cihazlarını senkron değiştirir.
+
+STEP=5
+REF="/sys/class/backlight/intel_backlight"
+[ -d "$REF" ] || REF=$(find /sys/class/backlight -mindepth 1 -maxdepth 1 | head -n 1)
+
+ref_max=$(cat "$REF/max_brightness")
+ref_cur=$(cat "$REF/brightness")
+cur_pct=$(( (ref_cur * 100 + ref_max / 2) / ref_max ))
+
+case "$1" in
+    up|+)   new_pct=$(( cur_pct + STEP )) ;;
+    down|-) new_pct=$(( cur_pct - STEP )) ;;
+    ''|*[!0-9]*) echo "Usage: $0 up|down|<percent>"; exit 1 ;;
+    *)      new_pct=$1 ;;
+esac
+[ "$new_pct" -gt 100 ] && new_pct=100
+[ "$new_pct" -lt 1 ] && new_pct=1
+
+# seat0 üzerindeki aktif oturumun D-Bus yolunu bul (ID'ler escape edilir: 4 -> _34)
+session_path=""
+for s in $(loginctl --no-legend list-sessions | awk '{print $1}'); do
+    if [ "$(loginctl show-session "$s" -p Active --value)" = "yes" ] && \
+       [ "$(loginctl show-session "$s" -p Seat --value)" = "seat0" ]; then
+        session_path=$(busctl call org.freedesktop.login1 /org/freedesktop/login1 \
+            org.freedesktop.login1.Manager GetSession s "$s" 2>/dev/null | awk '{print $2}' | tr -d '"')
+        break
+    fi
+done
+
+for dev in /sys/class/backlight/*; do
+    name=$(basename "$dev")
+    max=$(cat "$dev/max_brightness")
+    val=$(( max * new_pct / 100 ))
+    [ "$val" -lt 1 ] && val=1
+    if [ -n "$session_path" ]; then
+        busctl call org.freedesktop.login1 "$session_path" org.freedesktop.login1.Session \
+            SetBrightness ssu backlight "$name" "$val" >/dev/null 2>&1 && continue
+    fi
+    brightnessctl -q -d "$name" set "$val" >/dev/null 2>&1
+done
+
+notify-send -a "Brightness" -t 1200 \
+    -h string:x-dunst-stack-tag:brightness -h int:value:"$new_pct" \
+    -i display-brightness-symbolic "Parlaklık" "%$new_pct"

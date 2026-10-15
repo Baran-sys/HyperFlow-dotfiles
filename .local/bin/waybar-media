@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import html
+
+def get_media_info():
+    try:
+        # Check playerctl status
+        status_res = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=1)
+        if status_res.returncode != 0:
+            return {
+                "text": "  Medya",
+                "tooltip": "Medya oynatıcıyı açmak için tıklayın\n(Şu anda çalan medya yok)",
+                "class": "stopped"
+            }
+
+        status = status_res.stdout.strip()
+
+        # Get metadata
+        meta = subprocess.run(
+            ["playerctl", "metadata", "--format", "{{playerName}}///{{title}}///{{artist}}///{{album}}"],
+            capture_output=True, text=True, timeout=1
+        ).stdout.strip().split("///")
+
+        player_name = meta[0].lower() if len(meta) > 0 else ""
+        title = meta[1].strip() if len(meta) > 1 else ""
+        artist = meta[2].strip() if len(meta) > 2 else ""
+        album = meta[3].strip() if len(meta) > 3 else ""
+
+        # Player icon
+        if "spotify" in player_name:
+            icon = ""
+        elif "firefox" in player_name:
+            icon = "󰈹"
+        elif "chromium" in player_name or "chrome" in player_name:
+            icon = ""
+        elif "mpv" in player_name:
+            icon = ""
+        else:
+            icon = ""
+
+        status_icon = "" if status == "Playing" else ""
+
+        if title and artist:
+            display_text = f"{title} - {artist}"
+        elif title:
+            display_text = title
+        else:
+            display_text = "Bilinmeyen Parça"
+
+        # Truncate if long
+        if len(display_text) > 26:
+            display_text = display_text[:25] + "…"
+
+        full_text = f"{icon}  {display_text}"
+        tooltip = f"{player_name.capitalize()} ({status})\n{title}\nSanatçı: {artist}\nAlbüm: {album}"
+
+        return {
+            "text": full_text,
+            "tooltip": tooltip.strip(),
+            "class": status.lower()
+        }
+    except Exception:
+        return {
+            "text": "  Medya",
+            "tooltip": "Medya Oynatıcı",
+            "class": "stopped"
+        }
+
+if __name__ == "__main__":
+    data = get_media_info()
+    print(json.dumps(data, ensure_ascii=False))

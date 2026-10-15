@@ -1,0 +1,167 @@
+{
+    "layer": "top",
+    "position": "top",
+    "mode": "dock",
+    "exclusive": true,
+    "passthrough": false,
+    "gtk-layer-shell": true,
+    "height": 0,
+    "modules-left": [
+        "clock",
+        "custom/media",
+        "hyprland/workspaces"
+    ],
+    "modules-center": [
+        "hyprland/window"
+    ],
+    "modules-right": [
+        "tray",
+        "network",
+        "bluetooth",
+        "battery",
+        "custom/system",
+        "backlight",
+        "pulseaudio",
+        "custom/power"
+    ],
+        "custom/media": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "/home/bren/.local/bin/waybar-media",
+        "interval": 2,
+        "on-click": "/home/bren/.local/bin/media-player",
+        "on-click-right": "playerctl play-pause",
+        "on-scroll-up": "playerctl next",
+        "on-scroll-down": "playerctl previous"
+    },
+    "hyprland/window": {
+        "format": "{}"
+    },
+    "hyprland/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "on-click": "activate"
+    },
+    "tray": {
+        "icon-size": 16,
+        "spacing": 8
+    },
+    "clock": {
+        "format": "  {:%d-%m-%Y    %H:%M}",
+        "on-click": "/home/bren/.local/bin/calendar-app",
+        "interval": 1,
+        "rotate": 0,
+        "tooltip-format": "<tt>{calendar}</tt>",
+        "calendar": {
+            "mode": "month",
+            "mode-mon-col": 3,
+            "on-scroll": 1,
+            
+            "format": {
+                "months": "<span color=\"#a6adc8\"><b>{}</b></span>",
+                "weekdays": "<span color=\"#a6adc8\"><b>{}</b></span>",
+                "today": "<span color=\"#a6adc8\"><b>{}</b></span>",
+                "days": "<span color=\"#555869\"><b>{}</b></span>"
+            }
+        }
+    },
+    "network": {
+        "format-wifi": "󰤨  {essid}",
+        "format-ethernet": "󰈀  {ipaddr}",
+        "format-linked": "󰈀  {ifname} (No IP)",
+        "format-disconnected": "󰖪 ",
+        "format-disabled": "󰖪 ",
+        "tooltip-format-disabled": "Wi-Fi Kapalı",
+        "tooltip-format": "Ağ: {essid}\\nSinyal: {signalStrength}% ({signaldBm} dBm)\\nIP: {ipaddr}",
+        "tooltip-format-disconnected": "Bağlantı yok",
+        "on-click": "/home/bren/.local/bin/wifi-manager",
+        "interval": 2,
+        "on-click-right": "/home/bren/.local/bin/toggle-wifi"
+    },
+    "bluetooth": {
+        "format": "",
+        "format-connected": " {device_alias}",
+        "format-disabled": "󰂲",
+        "format-off": "󰂲",
+        "tooltip-format": "{controller_alias} {controller_address}",
+        "tooltip-format-connected": "{controller_alias} {controller_address} | {num_connections} bağlı\\n\\n{device_enumerate}",
+        "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
+        "on-click": "/home/bren/.local/bin/bluetooth-manager",
+        "on-click-right": "rfkill toggle bluetooth"
+    },
+    "custom/system": {
+        "format": "{}",
+        "return-type": "json",
+        "exec": "/home/bren/.local/bin/waybar-system",
+        "interval": 2,
+        "on-click": "/home/bren/.local/bin/task-manager",
+        "tooltip": true
+    },
+    "backlight": {
+        "device": "intel_backlight",
+        "format": "{icon} {percent}%",
+        "format-icons": [
+            "󰃞",
+            "󰃟",
+            "󰃠"
+        ],
+        "on-scroll-up": "/home/bren/.local/bin/change-brightness up",
+        "on-scroll-down": "/home/bren/.local/bin/change-brightness down",
+        "min-length": 6
+    },
+    "battery": {
+        "on-click": "/home/bren/.local/bin/power-menu",
+        "states": {
+            "good": 95,
+            "warning": 30,
+            "critical": 20
+        },
+        "format": "{icon} {capacity}%",
+        "format-charging": " {capacity}%",
+        "format-plugged": " {capacity}%",
+        "format-icons": [
+            "󰂃",
+            "󰁺",
+            "󰁻",
+            "󰁼",
+            "󰁽",
+            "󰁾",
+            "󰁿",
+            "󰂀",
+            "󰂁",
+            "󰂂",
+            "󰁹"
+        ]
+    },
+    "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "tooltip": false,
+        "format-muted": "  Muted",
+        "on-click": "/home/bren/.local/bin/audio-mixer",
+        "on-click-right": "pamixer -t",
+        "on-scroll-up": "pamixer -i 1",
+        "on-scroll-down": "pamixer -d 1",
+        "scroll-step": 5,
+        "format-icons": {
+            "headphone": "",
+            "hands-free": "",
+            "headset": "",
+            "phone": "",
+            "portable": "",
+            "car": "",
+            "default": [
+                "",
+                "",
+                "",
+                ""
+            ]
+        }
+    }
+,
+    "custom/power": {
+        "format": "",
+        "tooltip": true,
+        "tooltip-format": "Güç ve Oturum Menüsü",
+        "on-click": "/home/bren/.local/bin/power-session"
+    }
+}

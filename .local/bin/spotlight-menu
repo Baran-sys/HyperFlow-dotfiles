@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# Toggle: If rofi is already open, close it
+if pkill -x rofi; then
+    exit 0
+fi
+
+# Run spotlight rofi
+rofi -show drun -theme ~/.config/rofi/spotlight.rasi

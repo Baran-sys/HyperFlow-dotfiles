@@ -1,0 +1,654 @@
+#!/usr/bin/env python3
+import sys
+import os
+import signal
+
+# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
+my_pid = os.getpid()
+my_name = os.path.basename(sys.argv[0])
+for pid_str in os.listdir('/proc'):
+    if pid_str.isdigit() and int(pid_str) != my_pid:
+        try:
+            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
+                cmd = pf.read().decode(errors='ignore')
+                if my_name in cmd and 'python' in cmd:
+                    os.kill(int(pid_str), signal.SIGTERM)
+                    sys.exit(0)
+        except Exception:
+            pass
+
+import sys
+import os
+import re
+import json
+import subprocess
+import gi
+
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gtk, Gdk, GLib, Gio
+
+CSS_STYLE = b"""
+window {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 12px;
+}
+
+headerbar {
+    background-color: #181825;
+    border-bottom: 1px solid #313244;
+    color: #cdd6f4;
+    padding: 5px 12px;
+}
+
+headerbar button {
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 8px;
+    border: 1px solid #45475a;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+headerbar button:hover {
+    background: #45475a;
+    color: #ffffff;
+}
+
+.battery-card {
+    background: #252538;
+    border: 1px solid #313244;
+    border-radius: 12px;
+    margin: 6px 10px 4px 10px;
+    padding: 8px 12px;
+}
+
+.battery-pct {
+    font-size: 20px;
+    font-weight: 700;
+    color: #89b4fa;
+}
+
+.battery-state {
+    font-size: 11px;
+    color: #a6adc8;
+    margin-top: 2px;
+}
+
+list {
+    background-color: transparent;
+}
+
+row {
+    padding: 5px 8px;
+    border-radius: 8px;
+    margin: 2px 10px;
+    background-color: #252538;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: all 150ms ease;
+}
+
+row:hover {
+    background-color: #313244;
+    border: 1px solid #45475a;
+}
+
+.profile-active {
+    background: rgba(166, 227, 161, 0.15);
+    border: 1px solid rgba(166, 227, 161, 0.4);
+}
+
+.profile-active:hover {
+    background: rgba(166, 227, 161, 0.22);
+}
+
+.hz-active {
+    background: rgba(137, 180, 250, 0.15);
+    border: 1px solid rgba(137, 180, 250, 0.4);
+}
+
+.hz-active:hover {
+    background: rgba(137, 180, 250, 0.22);
+}
+
+.badge-active {
+    background: rgba(166, 227, 161, 0.2);
+    color: #a6e3a1;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 6px; font-size: 10px;
+}
+
+.badge-hz-active {
+    background: rgba(137, 180, 250, 0.2);
+    color: #89b4fa;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 6px; font-size: 10px;
+}
+
+.badge-time {
+    background: rgba(137, 180, 250, 0.15);
+    color: #89b4fa;
+    font-size: 11px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 6px; font-size: 10px;
+    border: 1px solid rgba(137, 180, 250, 0.3);
+}
+
+.badge-discharging {
+    background: rgba(249, 226, 175, 0.15);
+    color: #f9e2af;
+    font-size: 11px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 6px; font-size: 10px;
+    border: 1px solid rgba(249, 226, 175, 0.3);
+}
+
+.badge-full {
+    background: rgba(166, 227, 161, 0.15);
+    color: #a6e3a1;
+    font-size: 11px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 6px; font-size: 10px;
+    border: 1px solid rgba(166, 227, 161, 0.3);
+}
+
+.section-title {
+    font-size: 10px;
+    font-weight: bold;
+    color: #a6adc8;
+    margin: 6px 12px 2px 12px;
+}
+
+.btn-select {
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 6px;
+    border: 1px solid #45475a;
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+.btn-select:hover {
+    background: #45475a;
+    color: #ffffff;
+}
+
+.btn-caffeine-active {
+    background: rgba(166, 227, 161, 0.25);
+    color: #a6e3a1;
+    border-color: #a6e3a1;
+}
+
+.status-bar {
+    background-color: #181825;
+    border-top: 1px solid #313244;
+    padding: 2px 6px; font-size: 10px;
+    color: #a6adc8;
+    font-size: 11px;
+}
+"""
+
+PROFILES = [
+    {
+        "id": "performance",
+        "name": "Yüksek Performans",
+        "desc": "Maksimum CPU gücü",
+        "icon": "speedometer-symbolic"
+    },
+    {
+        "id": "balanced",
+        "name": "Dengeli",
+        "desc": "Pil ve hız arasında denge",
+        "icon": "battery-good-symbolic"
+    },
+    {
+        "id": "power-saver",
+        "name": "Güç Tasarrufu",
+        "desc": "Düşük enerji, uzun pil ömrü",
+        "icon": "battery-caution-charging-symbolic"
+    }
+]
+
+REFRESH_RATES = [
+    {
+        "hz": 165,
+        "name": "165 Hz (Akıcı Mod)",
+        "desc": "Maksimum akıcılık, oyun ve animasyon",
+        "icon": "video-display-symbolic"
+    },
+    {
+        "hz": 60,
+        "name": "60 Hz (Pil Tasarrufu)",
+        "desc": "Düşük ekran tüketimi, uzun pil",
+        "icon": "battery-symbolic"
+    }
+]
+
+class PowerMenuWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(title="Güç ve Ekran Yönetimi", application=app)
+        self.set_default_size(340, 460)
+        self.set_position(Gtk.WindowPosition.CENTER)
+
+        self.connect("key-press-event", self.on_key_press)
+        self.connect("focus-out-event", self.on_focus_out)
+        self.ready_to_close = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+
+        # HeaderBar
+        self.header = Gtk.HeaderBar()
+        self.header.set_show_close_button(True)
+        self.header.set_title("Güç & Ekran Profili")
+        self.set_titlebar(self.header)
+
+        # Caffeine Button
+        self.btn_caffeine = Gtk.Button()
+        self.btn_caffeine.set_tooltip_text("Caffeine Modu (Ekran Kilidini Durdur)")
+        self.btn_caffeine.connect("clicked", lambda b: self.action_toggle_caffeine())
+        self.lbl_caffeine = Gtk.Label()
+        self.lbl_caffeine.set_markup("<span font_family='JetBrainsMono Nerd Font' font='13'></span>")
+        self.btn_caffeine.add(self.lbl_caffeine)
+        self.header.pack_start(self.btn_caffeine)
+        self.update_caffeine_ui()
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        main_box.pack_start(scrolled, True, True, 0)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        scrolled.add(content_box)
+
+        # Battery Info Card
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.get_style_context().add_class("battery-card")
+
+        h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.lbl_pct = Gtk.Label(label="Pil Yükleniyor...")
+        self.lbl_pct.get_style_context().add_class("battery-pct")
+        h_box.pack_start(self.lbl_pct, False, False, 0)
+
+        self.lbl_time_badge = Gtk.Label(label="")
+        self.lbl_time_badge.set_valign(Gtk.Align.CENTER)
+        h_box.pack_end(self.lbl_time_badge, False, False, 0)
+
+        card.pack_start(h_box, False, False, 0)
+
+        self.lbl_status = Gtk.Label(label="")
+        self.lbl_status.get_style_context().add_class("battery-state")
+        self.lbl_status.set_halign(Gtk.Align.START)
+        card.pack_start(self.lbl_status, False, False, 0)
+
+        content_box.pack_start(card, False, False, 0)
+
+        # 1. Section: Display Refresh Rate
+        lbl_hz_title = Gtk.Label(label="EKRAN YENİLEME HIZI (HZ)")
+        lbl_hz_title.get_style_context().add_class("section-title")
+        lbl_hz_title.set_markup("<small><span alpha='65%'><b>EKRAN YENİLEME HIZI (HZ)</b></span></small>")
+        lbl_hz_title.set_halign(Gtk.Align.START)
+        content_box.pack_start(lbl_hz_title, False, False, 0)
+
+        self.listbox_hz = Gtk.ListBox()
+        self.listbox_hz.set_selection_mode(Gtk.SelectionMode.NONE)
+        content_box.pack_start(self.listbox_hz, False, False, 0)
+
+        # 2. Section: Power Profiles
+        lbl_prof_title = Gtk.Label(label="GÜÇ PROFİLİ")
+        lbl_prof_title.get_style_context().add_class("section-title")
+        lbl_prof_title.set_markup("<small><span alpha='65%'><b>GÜÇ PROFİLİ (CPU / ENERJİ)</b></span></small>")
+        lbl_prof_title.set_halign(Gtk.Align.START)
+        content_box.pack_start(lbl_prof_title, False, False, 0)
+
+        self.listbox_prof = Gtk.ListBox()
+        self.listbox_prof.set_selection_mode(Gtk.SelectionMode.NONE)
+        content_box.pack_start(self.listbox_prof, False, False, 0)
+
+        # Status Bar
+        status_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        status_bar.get_style_context().add_class("status-bar")
+        self.lbl_footer = Gtk.Label(label="")
+        status_bar.pack_start(self.lbl_footer, True, True, 0)
+        main_box.pack_end(status_bar, False, False, 0)
+
+        self.show_all()
+        self.set_focus(None)
+
+        def _init_power():
+            self.refresh_ui()
+            return False
+
+        GLib.idle_add(_init_power)
+        GLib.timeout_add_seconds(5, self.on_timer_refresh)
+
+    def is_caffeine_active(self):
+        res = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True)
+        return res.returncode != 0
+
+    def update_caffeine_ui(self):
+        active = self.is_caffeine_active()
+        ctx = self.btn_caffeine.get_style_context()
+        if active:
+            if not ctx.has_class("btn-caffeine-active"):
+                ctx.add_class("btn-caffeine-active")
+            self.btn_caffeine.set_tooltip_text("Caffeine Aktif (Ekran Kilidi Kapalı)")
+        else:
+            if ctx.has_class("btn-caffeine-active"):
+                ctx.remove_class("btn-caffeine-active")
+            self.btn_caffeine.set_tooltip_text("Caffeine Kapalı (Tıkla: Ekran Kilidini Durdur)")
+
+    def action_toggle_caffeine(self):
+        subprocess.run(["/home/bren/.local/bin/toggle-caffeine"])
+        self.update_caffeine_ui()
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
+            self.close()
+            return True
+        return False
+
+    def on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def on_timer_refresh(self):
+        if self.get_visible():
+            self.refresh_ui()
+        return True
+
+    def get_current_profile(self):
+        try:
+            return subprocess.check_output(["powerprofilesctl", "get"]).decode().strip()
+        except Exception:
+            return "balanced"
+
+    def get_current_refresh_rate(self):
+        try:
+            res = subprocess.check_output(["hyprctl", "monitors", "-j"]).decode()
+            data = json.loads(res)
+            if data and len(data) > 0:
+                return int(round(data[0].get("refreshRate", 165)))
+        except Exception:
+            pass
+        return 165
+
+    def get_battery_time_info(self, status):
+        time_badge = ""
+        badge_style = "badge-time"
+        time_detail = ""
+
+        try:
+            out = subprocess.check_output(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT1"], text=True, timeout=1)
+            tte = re.search(r'time to empty:\s*([^\n]+)', out)
+            ttf = re.search(r'time to full:\s*([^\n]+)', out)
+
+            if tte:
+                raw = tte.group(1).strip()
+                raw_tr = raw.replace('hours', 'saat').replace('hour', 'saat').replace('minutes', 'dk').replace('minute', 'dk')
+                time_badge = f"⏱ {raw_tr} kaldı"
+                badge_style = "badge-discharging"
+                time_detail = f"Kalan Pil Süresi: ~{raw_tr}"
+            elif ttf:
+                raw = ttf.group(1).strip()
+                raw_tr = raw.replace('hours', 'saat').replace('hour', 'saat').replace('minutes', 'dk').replace('minute', 'dk')
+                time_badge = f"⚡ {raw_tr} doluma"
+                badge_style = "badge-time"
+                time_detail = f"Tam Doluma Kalan Süre: ~{raw_tr}"
+            elif status == "Full" or "fully-charged" in out:
+                time_badge = "Prizde • Tam Dolu"
+                badge_style = "badge-full"
+                time_detail = "Pil tam dolu, şarj aleti takılı"
+            elif status == "Charging":
+                time_badge = "⚡ Şarj Oluyor"
+                badge_style = "badge-time"
+                time_detail = "Cihaz şarj ediliyor"
+            else:
+                time_badge = "Pilde"
+                badge_style = "badge-discharging"
+                time_detail = "Pil gücüyle çalışıyor"
+        except Exception:
+            # Fallback calculation using sysfs charge and current
+            try:
+                c_now = int(open("/sys/class/power_supply/BAT1/charge_now").read().strip())
+                curr = int(open("/sys/class/power_supply/BAT1/current_now").read().strip())
+                c_full = int(open("/sys/class/power_supply/BAT1/charge_full").read().strip())
+                if curr > 0:
+                    if status == "Discharging":
+                        mins = int((c_now / curr) * 60)
+                        h, m = divmod(mins, 60)
+                        time_badge = f"⏱ {h}s {m}dk kaldı" if h else f"⏱ {m}dk kaldı"
+                        badge_style = "badge-discharging"
+                        time_detail = f"Kalan Pil Süresi: ~{h} saat {m} dakika"
+                    elif status == "Charging":
+                        mins = int(((c_full - c_now) / curr) * 60)
+                        h, m = divmod(mins, 60)
+                        time_badge = f"⚡ {h}s {m}dk doluma" if h else f"⚡ {m}dk doluma"
+                        badge_style = "badge-time"
+                        time_detail = f"Tam Doluma Kalan Süre: ~{h} saat {m} dakika"
+            except Exception:
+                pass
+
+        return time_badge, badge_style, time_detail
+
+    def get_battery_icon(self, cap_int, status):
+        if status == "Charging":
+            return "󰂄"
+        if status == "Full" or cap_int >= 95:
+            return "󰁹"
+        if cap_int >= 80:
+            return "󰂂"
+        if cap_int >= 65:
+            return "󰂀"
+        if cap_int >= 50:
+            return "󰁾"
+        if cap_int >= 35:
+            return "󰁽"
+        if cap_int >= 20:
+            return "󰁻"
+        return "󰂃"
+
+    def refresh_ui(self):
+        current_prof = self.get_current_profile()
+        current_hz = self.get_current_refresh_rate()
+
+        self.header.set_subtitle(f"{current_prof.capitalize()}  •  {current_hz} Hz")
+        self.lbl_footer.set_text(f"Plan: {current_prof.capitalize()}  •  Ekran: {current_hz} Hz (eDP-1)")
+
+        # Battery status & time calculation
+        try:
+            cap_file = "/sys/class/power_supply/BAT1/capacity"
+            status_file = "/sys/class/power_supply/BAT1/status"
+            cap = "100"
+            status = "Full"
+            if os.path.exists(cap_file):
+                with open(cap_file, 'r') as fc:
+                    cap = fc.read().strip()
+            if os.path.exists(status_file):
+                with open(status_file, 'r') as fs:
+                    status = fs.read().strip()
+
+            cap_int = int(cap) if cap.isdigit() else 100
+            icon = self.get_battery_icon(cap_int, status)
+            self.lbl_pct.set_text(f"{icon}  %{cap}")
+
+            time_badge, badge_style, time_detail = self.get_battery_time_info(status)
+
+            if status == "Charging":
+                status_tr = f"Durum: Şarj Oluyor ({time_detail})" if time_detail else "Durum: Şarj Oluyor"
+            elif status == "Full":
+                status_tr = "Durum: Tam Dolu (Prize Takılı)"
+            else:
+                status_tr = f"Durum: Pilde Çalışıyor ({time_detail})" if time_detail else "Durum: Pilde Çalışıyor"
+            self.lbl_status.set_text(status_tr)
+
+            # Update badge
+            self.lbl_time_badge.get_style_context().remove_class("badge-time")
+            self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
+            self.lbl_time_badge.get_style_context().remove_class("badge-full")
+            self.lbl_time_badge.get_style_context().add_class(badge_style)
+            self.lbl_time_badge.set_text(time_badge)
+            self.lbl_time_badge.show()
+
+        except Exception:
+            self.lbl_pct.set_text("󰁹  %100")
+            self.lbl_status.set_text("Durum: Prize Takılı")
+            self.lbl_time_badge.hide()
+
+        # Repopulate Refresh Rates
+        for child in self.listbox_hz.get_children():
+            self.listbox_hz.remove(child)
+
+        for r in REFRESH_RATES:
+            is_active = (r["hz"] == current_hz)
+            row = Gtk.ListBoxRow()
+            if is_active:
+                row.get_style_context().add_class("hz-active")
+
+            hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            img = Gtk.Image.new_from_icon_name(r["icon"], Gtk.IconSize.DND)
+            img.set_pixel_size(20)
+            hbox.pack_start(img, False, False, 0)
+
+            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl_name = Gtk.Label()
+            lbl_name.set_markup(f"<b>{r['name']}</b>")
+            lbl_name.set_halign(Gtk.Align.START)
+            vbox.pack_start(lbl_name, False, False, 0)
+
+            lbl_desc = Gtk.Label()
+            lbl_desc.set_markup(f"<small><span alpha='65%'>{r['desc']}</span></small>")
+            lbl_desc.set_halign(Gtk.Align.START)
+            vbox.pack_start(lbl_desc, False, False, 0)
+            hbox.pack_start(vbox, True, True, 0)
+
+            if is_active:
+                badge = Gtk.Label(label="✓ Aktif")
+                badge.get_style_context().add_class("badge-hz-active")
+                badge.set_valign(Gtk.Align.CENTER)
+                hbox.pack_end(badge, False, False, 0)
+            else:
+                btn_set = Gtk.Button(label="Seç")
+                btn_set.get_style_context().add_class("btn-select")
+                btn_set.set_valign(Gtk.Align.CENTER)
+                btn_set.connect("clicked", lambda b, hz=r["hz"]: self.set_refresh_rate(hz))
+                hbox.pack_end(btn_set, False, False, 0)
+
+            row.add(hbox)
+            row.connect("button-press-event", lambda w, e, hz=r["hz"]: self.set_refresh_rate(hz) if e.button == 1 else None)
+            self.listbox_hz.add(row)
+
+        # Repopulate Power Profiles
+        for child in self.listbox_prof.get_children():
+            self.listbox_prof.remove(child)
+
+        for p in PROFILES:
+            is_active = (p["id"] == current_prof)
+            row = Gtk.ListBoxRow()
+            if is_active:
+                row.get_style_context().add_class("profile-active")
+
+            hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            img = Gtk.Image.new_from_icon_name(p["icon"], Gtk.IconSize.DND)
+            img.set_pixel_size(20)
+            hbox.pack_start(img, False, False, 0)
+
+            vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            lbl_name = Gtk.Label()
+            lbl_name.set_markup(f"<b>{p['name']}</b>")
+            lbl_name.set_halign(Gtk.Align.START)
+            vbox.pack_start(lbl_name, False, False, 0)
+
+            lbl_desc = Gtk.Label()
+            lbl_desc.set_markup(f"<small><span alpha='65%'>{p['desc']}</span></small>")
+            lbl_desc.set_halign(Gtk.Align.START)
+            vbox.pack_start(lbl_desc, False, False, 0)
+            hbox.pack_start(vbox, True, True, 0)
+
+            if is_active:
+                badge = Gtk.Label(label="✓ Aktif")
+                badge.get_style_context().add_class("badge-active")
+                badge.set_valign(Gtk.Align.CENTER)
+                hbox.pack_end(badge, False, False, 0)
+            else:
+                btn_set = Gtk.Button(label="Seç")
+                btn_set.get_style_context().add_class("btn-select")
+                btn_set.set_valign(Gtk.Align.CENTER)
+                btn_set.connect("clicked", lambda b, pid=p["id"]: self.set_profile(pid))
+                hbox.pack_end(btn_set, False, False, 0)
+
+            row.add(hbox)
+            row.connect("button-press-event", lambda w, e, pid=p["id"]: self.set_profile(pid) if e.button == 1 else None)
+            self.listbox_prof.add(row)
+
+        self.listbox_hz.show_all()
+        self.listbox_prof.show_all()
+
+    def set_profile(self, profile_id):
+        try:
+            subprocess.run(["powerprofilesctl", "set", profile_id], check=True)
+            self.refresh_ui()
+        except Exception:
+            pass
+
+    def set_refresh_rate(self, hz):
+        try:
+            subprocess.run(["hyprctl", "keyword", "monitor", f"eDP-1,1920x1080@{hz},auto,1.25"], check=True)
+
+            conf_path = os.path.expanduser("~/.config/hypr/hyprland.conf")
+            if os.path.exists(conf_path):
+                with open(conf_path, "r") as f:
+                    lines = f.readlines()
+                new_lines = []
+                for line in lines:
+                    if line.strip().startswith("monitor=eDP-1,"):
+                        new_lines.append(f"monitor=eDP-1,1920x1080@{hz},auto,1.25\n")
+                    else:
+                        new_lines.append(line)
+                with open(conf_path, "w") as f:
+                    f.writelines(new_lines)
+
+            GLib.timeout_add(200, self.refresh_ui)
+        except Exception:
+            pass
+
+
+class PowerMenuApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(
+            application_id="org.antigravity.powermenu",
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(CSS_STYLE)
+            screen = Gdk.Screen.get_default()
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+            self.window = PowerMenuWindow(self)
+            self.window.connect('destroy', lambda w: setattr(self, 'window', None))
+            self.window.present()
+        else:
+            self.window.close()
+            self.window = None
+
+
+if __name__ == "__main__":
+    app = PowerMenuApp()
+    sys.exit(app.run(sys.argv))
