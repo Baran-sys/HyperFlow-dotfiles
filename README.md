@@ -65,14 +65,13 @@ chmod +x install.sh
 
 | Kısayol | İşlev |
 |---|---|
-| `Super + Q` | Terminali Aç (Kitty) |
-| `Super + C` | Aktif Pencereyi Kapat |
+| `Super + T` | Terminali Aç (Kitty) |
+| `Super + Q` | Aktif Pencereyi Kapat |
 | `Super + E` | Dosya Yöneticisi (Dolphin) |
-| `Super + Space` | Spotlight Uygulama Başlatıcı |
+| `Super + A` | Spotlight Uygulama Başlatıcı |
 | `Super + V` | Pano Geçmişi (Clipboard Manager) |
-| `Super + L` | Ekranı Kilitle (Hyprlock) |
-| `Super + M` | Medya Oynatıcıyı Aç/Kapat |
-| `Super + Shift + S` | Ekran Görüntüsü Al (Grimblast) |
+| `Super + L` | Ekranı Kilitle (Hyprlock) ||
+| `PrintScreen` | Ekran Görüntüsü Al (Grimblast) |
 
 ---
 
