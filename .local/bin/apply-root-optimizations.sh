@@ -26,33 +26,33 @@ Section "Device"
     BusID "PCI:0:2:0"
 EndSection
 XCONF
-echo "  ✓ /etc/X11/xorg.conf.d/10-intel-only.conf oluşturuldu."
+echo "  [OK] /etc/X11/xorg.conf.d/10-intel-only.conf oluşturuldu."
 
 echo "[2/4] Pildeyken güç tasarrufu için udev kuralları ekleniyor..."
 mkdir -p /etc/udev/rules.d
 cat << 'UDEVCONF' > /etc/udev/rules.d/99-battery-powersave.rules
 # Pildeyken power-saver, prize takılıyken balanced profiline otomatik geçiş
-SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/powerprofilesctl set power-saver"
-SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/powerprofilesctl set balanced"
+# SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/powerprofilesctl set power-saver"
+# SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/powerprofilesctl set balanced"
 UDEVCONF
 udevadm control --reload && udevadm trigger || true
-echo "  ✓ Udev kuralları yüklendi ve tetiklendi."
+echo "  [OK] Udev kuralları yüklendi ve tetiklendi."
 
 echo "[3/4] Artık paketler ve gereksiz sistem önbellekleri temizleniyor..."
 # Artık rustup paketini kaldır (kullanıcı zaten ~/.cargo/bin/rustup kullanıyor)
 if pacman -Q rustup &>/dev/null; then
     pacman -Rns --noconfirm rustup || true
-    echo "  ✓ Artık rustup paketi kaldırıldı."
+    echo "  [OK] Artık rustup paketi kaldırıldı."
 fi
 
 # Pacman paket önbelleğini temizle (eski versiyonları siler)
-echo "  ✓ Pacman paket önbelleği temizleniyor..."
+echo "  [OK] Pacman paket önbelleği temizleniyor..."
 pacman -Sc --noconfirm || true
 
 echo "[4/4] Kontroller tamamlandı."
 echo ""
 echo "================================================================="
-echo "  ✓ Tüm Sistem Optimizasyonları Başarıyla Tamamlandı!"
+echo "  [OK] Tüm Sistem Optimizasyonları Başarıyla Tamamlandı!"
 echo "  Yeniden başlatma sonrası Xorg bir daha NVIDIA kartını tutmayacaktır."
 echo "================================================================="
 echo ""

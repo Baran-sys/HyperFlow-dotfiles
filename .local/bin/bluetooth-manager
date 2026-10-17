@@ -1,21 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
-import signal
-
-# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
-my_pid = os.getpid()
-my_name = os.path.basename(sys.argv[0])
-for pid_str in os.listdir('/proc'):
-    if pid_str.isdigit() and int(pid_str) != my_pid:
-        try:
-            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
-                cmd = pf.read().decode(errors='ignore')
-                if my_name in cmd and 'python' in cmd:
-                    os.kill(int(pid_str), signal.SIGTERM)
-                    sys.exit(0)
-        except Exception:
-            pass
+sys.path.insert(0, "/home/bren/.local/bin")
+from waybar_focus import SmartFocus, fast_toggle_or_lock
+fast_toggle_or_lock("bluetooth-manager")
 
 import sys
 import os
@@ -29,6 +17,10 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
 
 CSS_STYLE = b"""
+* {
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
 window {
     background-color: #1e1e2e;
     color: #cdd6f4;
@@ -36,11 +28,20 @@ window {
     border-radius: 12px;
 }
 
+window.csd > box.vertical,
+window > box,
+.background.csd {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-radius: 0 0 12px 12px;
+}
+
 headerbar {
     background-color: #181825;
     border-bottom: 1px solid #313244;
     color: #cdd6f4;
     padding: 5px 12px;
+    border-radius: 12px 12px 0 0;
 }
 
 headerbar button {
@@ -176,6 +177,11 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        try:
+            from waybar_focus import SmartFocus
+            SmartFocus.setup(self)
+        except Exception:
+            pass
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(main_box)
@@ -249,8 +255,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.set_focus(None)
 
         def _init_bt():
-            self.check_initial_state()
-            self.start_scan(rescan=True)
+            self.start_scan(rescan=False)
             return False
 
         GLib.idle_add(_init_bt)
@@ -309,34 +314,53 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         threading.Thread(target=self._scan_worker, args=(rescan,), daemon=True).start()
 
     def _scan_worker(self, rescan):
-        if rescan:
-            try:
-                subprocess.run(["bluetoothctl", "--timeout", "3", "scan", "on"], capture_output=True)
-            except Exception:
-                pass
-
-        devices = []
-        connected_names = []
+        # 1. Update power state quickly in background
         try:
-            res_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True)
-            for line in res_devs.stdout.splitlines():
-                parts = line.split(" ", 2)
-                if len(parts) >= 3 and parts[0] == "Device":
-                    mac = parts[1]
-                    name = parts[2].strip()
-                    info = self._get_device_info(mac, name)
-                    devices.append(info)
-                    if info["connected"]:
-                        connected_names.append(info["name"])
+            res_show = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True)
+            is_powered = "Powered: yes" in res_show.stdout
+            self.bt_enabled = is_powered
+            def _sync_switch():
+                self.switch_bt.handler_block_by_func(self.on_bt_switch_toggled)
+                self.switch_bt.set_active(is_powered)
+                self.switch_bt.handler_unblock_by_func(self.on_bt_switch_toggled)
+            GLib.idle_add(_sync_switch)
+            if not is_powered:
+                GLib.idle_add(self.clear_list, "Bluetooth Kapalı")
+                return
         except Exception:
             pass
 
-        # Sort: connected first, paired second, then name
-        def sort_key(d):
-            return (1 if d["connected"] else 0, 1 if d["paired"] else 0, d["name"].lower())
-        devices.sort(key=sort_key, reverse=True)
+        # 2. Fast pass: Load paired & known devices immediately (<20ms)
+        def _fetch_devices():
+            devs = []
+            conn_names = []
+            try:
+                res_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True)
+                for line in res_devs.stdout.splitlines():
+                    parts = line.split(" ", 2)
+                    if len(parts) >= 3 and parts[0] == "Device":
+                        mac = parts[1]
+                        name = parts[2].strip()
+                        info = self._get_device_info(mac, name)
+                        devs.append(info)
+                        if info["connected"]:
+                            conn_names.append(info["name"])
+            except Exception:
+                pass
+            devs.sort(key=lambda d: (1 if d["connected"] else 0, 1 if d["paired"] else 0, d["name"].lower()), reverse=True)
+            return devs, conn_names
 
+        devices, connected_names = _fetch_devices()
         GLib.idle_add(self._scan_complete, devices, connected_names)
+
+        # 3. If explicit rescan requested, perform background scan without blocking existing devices
+        if rescan:
+            try:
+                subprocess.run(["bluetoothctl", "--timeout", "3", "scan", "on"], capture_output=True)
+                devices, connected_names = _fetch_devices()
+                GLib.idle_add(self._scan_complete, devices, connected_names)
+            except Exception:
+                pass
 
     def _get_device_info(self, mac, name):
         info = {
@@ -454,7 +478,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         vbox.pack_start(lbl_mac, False, False, 0)
 
         if dev["connected"]:
-            lbl_conn = Gtk.Label(label="✓ Bağlı")
+            lbl_conn = Gtk.Label(label="Bağlı")
             lbl_conn.get_style_context().add_class("badge-connected")
             lbl_conn.set_valign(Gtk.Align.CENTER)
             hbox.pack_end(lbl_conn, False, False, 4)
@@ -574,7 +598,7 @@ class BluetoothManagerApp(Gtk.Application):
     def do_activate(self):
         if not self.window:
             css_provider = Gtk.CssProvider()
-            css_provider.load_from_data(CSS_STYLE)
+            css_provider.load_from_data(SmartFocus.get_themed_css(CSS_STYLE))
             screen = Gdk.Screen.get_default()
             Gtk.StyleContext.add_provider_for_screen(
                 screen,

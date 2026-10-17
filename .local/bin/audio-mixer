@@ -1,21 +1,9 @@
 #!/usr/bin/env python3
 import sys
 import os
-import signal
-
-# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
-my_pid = os.getpid()
-my_name = os.path.basename(sys.argv[0])
-for pid_str in os.listdir('/proc'):
-    if pid_str.isdigit() and int(pid_str) != my_pid:
-        try:
-            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
-                cmd = pf.read().decode(errors='ignore')
-                if my_name in cmd and 'python' in cmd:
-                    os.kill(int(pid_str), signal.SIGTERM)
-                    sys.exit(0)
-        except Exception:
-            pass
+sys.path.insert(0, "/home/bren/.local/bin")
+from waybar_focus import SmartFocus, fast_toggle_or_lock
+fast_toggle_or_lock("audio-mixer")
 
 import sys
 import os
@@ -28,6 +16,10 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
 
 CSS_STYLE = b"""
+* {
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
 window {
     background-color: #1e1e2e;
     color: #cdd6f4;
@@ -35,11 +27,20 @@ window {
     border-radius: 12px;
 }
 
+window.csd > box.vertical,
+window > box,
+.background.csd {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-radius: 0 0 12px 12px;
+}
+
 headerbar {
     background-color: #181825;
     border-bottom: 1px solid #313244;
     color: #cdd6f4;
     padding: 5px 12px;
+    border-radius: 12px 12px 0 0;
 }
 
 headerbar button {
@@ -165,6 +166,11 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        try:
+            from waybar_focus import SmartFocus
+            SmartFocus.setup(self)
+        except Exception:
+            pass
         self.updating_ui = False
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -327,37 +333,69 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         if self.updating_ui:
             return True
         self.updating_ui = True
+        threading.Thread(target=self._worker_fetch_audio, daemon=True).start()
+        return True
 
+    def _worker_fetch_audio(self):
         try:
-            # 1. Output volume & mute
             vol_out = int(subprocess.check_output(["pamixer", "--get-volume"]).decode().strip())
             mute_out = subprocess.check_output(["pamixer", "--get-mute"]).decode().strip() == "true"
-            self.scale_sink.set_value(vol_out)
-            self.lbl_vol_sink.set_text(f"%{vol_out}")
-            self.btn_mute_sink.set_active(mute_out)
-            self.img_mute_sink.set_from_icon_name("audio-volume-muted-symbolic" if mute_out else "audio-volume-high-symbolic", Gtk.IconSize.BUTTON)
-
-            # 2. Input volume & mute
             vol_in = int(subprocess.check_output(["pamixer", "--default-source", "--get-volume"]).decode().strip())
             mute_in = subprocess.check_output(["pamixer", "--default-source", "--get-mute"]).decode().strip() == "true"
-            self.scale_source.set_value(vol_in)
-            self.lbl_vol_source.set_text(f"%{vol_in}")
-            self.btn_mute_source.set_active(mute_in)
-            self.img_mute_source.set_from_icon_name("microphone-sensitivity-muted-symbolic" if mute_in else "microphone-sensitivity-high-symbolic", Gtk.IconSize.BUTTON)
+            
+            # Devices
+            devices_needed = (len(self.combo_sinks.get_model()) == 0)
+            sink_list, def_s, source_list, def_src = [], "", [], ""
+            if devices_needed:
+                res_s = subprocess.run(["pamixer", "--list-sinks"], capture_output=True, text=True)
+                def_s = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True).stdout.strip()
+                for line in res_s.stdout.splitlines():
+                    m = re.match(r'(\d+)\s+"([^"]+)"\s+"[^"]*"\s+"([^"]+)"', line)
+                    if m:
+                        clean_desc = m.group(3).split("Controller ")[-1] if "Controller " in m.group(3) else m.group(3)
+                        sink_list.append((m.group(2), clean_desc))
 
-            # 3. Populate devices if empty
-            if len(self.combo_sinks.get_model()) == 0:
-                self._populate_devices()
+                res_src = subprocess.run(["pamixer", "--list-sources"], capture_output=True, text=True)
+                def_src = subprocess.run(["pactl", "get-default-source"], capture_output=True, text=True).stdout.strip()
+                for line in res_src.stdout.splitlines():
+                    m = re.match(r'(\d+)\s+"([^"]+)"\s+"[^"]*"\s+"([^"]+)"', line)
+                    if m and ".monitor" not in m.group(2):
+                        clean_desc = m.group(3).split("Controller ")[-1] if "Controller " in m.group(3) else m.group(3)
+                        source_list.append((m.group(2), clean_desc))
 
-            # 4. Refresh app streams
-            self._refresh_app_streams()
+            # Stream inputs
+            res_inputs = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True)
 
-            self.lbl_status.set_text(f"Çıkış: %{vol_out} {'(Sessiz)' if mute_out else ''}  •  Mikrofon: %{vol_in} {'(Sessiz)' if mute_in else ''}")
+            def _apply_ui():
+                try:
+                    self.scale_sink.set_value(vol_out)
+                    self.lbl_vol_sink.set_text(f"%{vol_out}")
+                    self.btn_mute_sink.set_active(mute_out)
+                    self.img_mute_sink.set_from_icon_name("audio-volume-muted-symbolic" if mute_out else "audio-volume-high-symbolic", Gtk.IconSize.BUTTON)
+
+                    self.scale_source.set_value(vol_in)
+                    self.lbl_vol_source.set_text(f"%{vol_in}")
+                    self.btn_mute_source.set_active(mute_in)
+                    self.img_mute_source.set_from_icon_name("microphone-sensitivity-muted-symbolic" if mute_in else "microphone-sensitivity-high-symbolic", Gtk.IconSize.BUTTON)
+
+                    if devices_needed:
+                        for s_name, clean_desc in sink_list:
+                            self.combo_sinks.append(s_name, clean_desc)
+                            if s_name == def_s:
+                                self.combo_sinks.set_active_id(s_name)
+                        for src_name, clean_desc in source_list:
+                            self.combo_sources.append(src_name, clean_desc)
+                            if src_name == def_src:
+                                self.combo_sources.set_active_id(src_name)
+
+                    self._parse_app_streams(res_inputs.stdout)
+                    self.lbl_status.set_text(f"Çıkış: %{vol_out} {'(Sessiz)' if mute_out else ''}  •  Mikrofon: %{vol_in} {'(Sessiz)' if mute_in else ''}")
+                finally:
+                    self.updating_ui = False
+
+            GLib.idle_add(_apply_ui)
         except Exception:
-            pass
-
-        self.updating_ui = False
-        return True
+            self.updating_ui = False
 
     def _populate_devices(self):
         # Sinks
@@ -398,13 +436,12 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         if idx_src > 0:
             self.combo_sources.set_active(def_src_idx)
 
-    def _refresh_app_streams(self):
+    def _parse_app_streams(self, pactl_output):
         for child in self.apps_box.get_children():
             self.apps_box.remove(child)
 
         try:
-            res = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True)
-            blocks = res.stdout.split("Sink Input #")
+            blocks = pactl_output.split("Sink Input #")
             found = False
             for b in blocks[1:]:
                 lines = b.splitlines()
@@ -465,12 +502,12 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
             return
         val = int(scale.get_value())
         self.lbl_vol_sink.set_text(f"%{val}")
-        subprocess.run(["pamixer", "--set-volume", str(val)])
+        subprocess.Popen(["pamixer", "--set-volume", str(val)])
 
     def on_sink_mute_toggled(self, btn):
         if self.updating_ui:
             return
-        subprocess.run(["pamixer", "-t"])
+        subprocess.Popen(["pamixer", "-t"])
         mute = btn.get_active()
         self.img_mute_sink.set_from_icon_name("audio-volume-muted-symbolic" if mute else "audio-volume-high-symbolic", Gtk.IconSize.BUTTON)
 
@@ -479,12 +516,12 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
             return
         val = int(scale.get_value())
         self.lbl_vol_source.set_text(f"%{val}")
-        subprocess.run(["pamixer", "--default-source", "--set-volume", str(val)])
+        subprocess.Popen(["pamixer", "--default-source", "--set-volume", str(val)])
 
     def on_source_mute_toggled(self, btn):
         if self.updating_ui:
             return
-        subprocess.run(["pamixer", "--default-source", "-m"])
+        subprocess.Popen(["pamixer", "--default-source", "-m"])
         mute = btn.get_active()
         self.img_mute_source.set_from_icon_name("microphone-sensitivity-muted-symbolic" if mute else "microphone-sensitivity-high-symbolic", Gtk.IconSize.BUTTON)
 
@@ -493,14 +530,14 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
             return
         sink_name = combo.get_active_id()
         if sink_name:
-            subprocess.run(["pactl", "set-default-sink", sink_name])
+            subprocess.Popen(["pactl", "set-default-sink", sink_name])
 
     def on_source_changed(self, combo):
         if self.updating_ui:
             return
         source_name = combo.get_active_id()
         if source_name:
-            subprocess.run(["pactl", "set-default-source", source_name])
+            subprocess.Popen(["pactl", "set-default-source", source_name])
 
 
 class AudioMixerApp(Gtk.Application):
@@ -514,7 +551,7 @@ class AudioMixerApp(Gtk.Application):
     def do_activate(self):
         if not self.window:
             css_provider = Gtk.CssProvider()
-            css_provider.load_from_data(CSS_STYLE)
+            css_provider.load_from_data(SmartFocus.get_themed_css(CSS_STYLE))
             screen = Gdk.Screen.get_default()
             Gtk.StyleContext.add_provider_for_screen(
                 screen,

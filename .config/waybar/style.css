@@ -8,7 +8,7 @@
 }
 
 window#waybar {
-    background: rgba(21, 18, 27, 0);
+    background: transparent;
     color: #cdd6f4;
 }
 
@@ -167,20 +167,30 @@ window#waybar {
 }
 #custom-media:hover {
     background: #313244;
+    color: #cdd6f4;
 }
-
-#custom-media {
-    border-radius: 10px;
-    margin-left: 6px;
-    margin-right: 6px;
-    color: #a6adc8;
-}
-#custom-media:hover {
-    background: #313244;
-}
-#custom-media.playing {
-    color: #89b4fa;
-}
+#custom-media.playing,
 #custom-media.paused {
     color: #a6adc8;
+}
+
+/* Tooltip (Koyu Mod - Catppuccin Mocha) */
+tooltip {
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+tooltip * {
+    background-color: transparent;
+    color: #cdd6f4;
+}
+
+tooltip label {
+    color: #cdd6f4;
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 4px;
 }

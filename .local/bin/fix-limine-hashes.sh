@@ -74,7 +74,7 @@ done
 
 echo ""
 echo "================================================================="
-echo "  ✓ İŞLEM BAŞARIYLA TAMAMLANDI!"
+echo "  [OK] İŞLEM BAŞARIYLA TAMAMLANDI!"
 echo "  Limine hash doğrulaması (ENABLE_VERIFICATION=no) kapatıldı."
 echo "  Artık başlangıçta hashleri elle silmenize gerek kalmadan sistem açılacak."
 echo "================================================================="

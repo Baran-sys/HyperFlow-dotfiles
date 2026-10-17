@@ -1,48 +1,48 @@
-# 🌸 Catppuccin Mocha Hyprland Dotfiles & Material 3 Applets
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/palette/macchiato.png" width="400" />
-</p>
-
+# Catppuccin Hyprland Dotfiles
 
 > [!NOTE]
-> Bu yapılandırma [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) reposundan fork edilerek / temel alınarak geliştirilmiştir. Üzerine Material 3 tasarım dilinde geliştirilmiş medya oynatıcı, CPU sıcaklık takipçili görev yöneticisi, macOS popover appletleri ve performans optimizasyonları eklenmiştir.
+> Bu yapılandırma [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) reposundan fork edilerek geliştirilmiştir. Dinamik açık/koyu tema motoru, Material 3 medya oynatıcı, CPU sıcaklık takipli görev yöneticisi, macOS popover tarzı sistem araçları ve performans optimizasyonları eklenmiştir.
 
-Modern, akıcı ve yüksek performanslı **Hyprland** masaüstü yapılandırması. **Waybar**, **Dunst**, **Kitty**, **Tofi**, **Rofi** ve Python/GTK3 ile sıfırdan geliştirilmiş **Material 3 / macOS Popover** tarzı bağımsız sistem araçlarını içerir.
-
----
-
-## ✨ Öne Çıkan Özellikler
-
-### 1. 🎵 Material 3 MPRIS Medya Oynatıcı (`media-player`)
-- **Material Design 3 Expressive Tuş Hiyerarşisi:**
-  - Vurgulu **FAB Oynat/Duraklat** butonu (`52px` daire, Catppuccin Mocha Mavi, yüksek kontrast).
-  - Dairesel **Tonal Atlama** butonları (`40px` daire, önceki/sonraki parça).
-  - **Karışık Çalma (Shuffle)** ve **Tekrar (Loop/Repeat)** modları (aktif/pasif renk geçişleri, şarkı/liste döngüsü).
-- **Cairo Yuvarlatılmış Albüm Kapağı:** Gerçek zamanlı şarkı kapağı önbellekleme ve `cairo` ile yumuşatılmış köşe maskelemesi.
-- **Etkileşimli Zaman Çubuğu (Seek Bar):** Şarkının istenilen yerine anında atlama ve uçlarda biçimlendirilmiş zaman etiketleri.
-- **Hızlı Ses Kontrolü:** Alt durum çubuğunda fare tekerleğiyle (`scroll`) anında ses açma/kısma.
-- **Hızlı Tek Örnek Denetimi (Single-Instance):** Waybar üzerinden tıklandığında <5ms içinde açılır/kapanır; Escape veya odak kaybında otomatik gizlenir.
-
-### 2. ⚡ Canlı Görev Yöneticisi & Kaynak İzleyici (`task-manager`)
-- **İşlemci Sıcaklığı:** Donanım sensörlerinden (`coretemp` / `Package id 0`) canlı CPU sıcaklığı takibi (`%11.0 (42°C)`).
-- **3'lü Kart Özeti:** CPU, RAM ve Çift GPU (NVIDIA RTX 4060 + Intel UHD) anlık kullanım grafikleri.
-- **Akıllı GPU İşlem Algılama:** İşlemlerin NVIDIA mı, Intel mi yoksa Hibrit mi kullandığını `/proc/fdinfo` ve `nvidia-smi` üzerinden gerçek zamanlı belirler.
-- **Arama ve Süreç Sonlandırma:** PID, işlem adı veya GPU adına göre anlık filtreleme ve `SIGTERM` ile güvenli kapatma.
-
-### 3. 🖥️ macOS Tarzı Popover Sistem Araçları (Waybar Applets)
-- 📶 **WiFi Yöneticisi (`wifi-manager`):** Çevredeki ağları listeleme, sinyal kalitesi ve bağlantı yönetimi.
-- 󰂯 **Bluetooth Yöneticisi (`bluetooth-manager`):** Eşleşmiş cihazları bağlama ve yeni cihaz tarama.
-- 🔊 **Ses Mikseri (`audio-mixer`):** Çıkış/giriş aygıtları ve akış bazlı ses düzeyleri.
-- 📅 **Takvim (`calendar-app`):** Sade ve hızlı tarih/ay görünümü.
-- 🔋 **Güç ve Oturum Menüsü (`power-menu`, `power-session`):** Pil sağlığı, Kafein modu (uyku önleyici) ve oturum kapatma/yeniden başlatma.
-- 🔍 **Spotlight & Pano Menüsü (`spotlight-menu`, `clipboard-menu`):** macOS Spotlight benzeri hızlı başlatıcı ve pano geçmişi.
+Hyprland için modern, sade ve akıcı masaüstü yapılandırması. Waybar, Dunst, Kitty, Rofi ve Python/GTK3 ile geliştirilmiş bağımsız sistem appletlerini içerir.
 
 ---
 
-## 🚀 Kurulum
+## Öne Çıkan Özellikler
 
-### Otomatik Kurulum (Tek Komut)
+### Dinamik Açık / Koyu Tema (Catppuccin Mocha & Latte)
+- Waybar üzerindeki parlaklık modülüne tıklandığında (veya sağ tıklandığında) sistem teması anında değişir.
+- Duvar kağıdı tema ile senkronize olarak değişir:
+  - Koyu Mod: Koyu mor Catppuccin yaprakları (`cat_leaves.png`)
+  - Açık Mod: Açık gri/beyaz Catppuccin yaprakları (`cat_leaves_light.png`)
+- Waybar, GTK 3/4, QT/Kvantum, Rofi, Kitty, Dunst ve kilit ekranı (Hyprlock) tek tıklamayla anında güncellenir.
+- Waybar v0.15.0 XDG Desktop Portal desteği sayesinde arayüz titreşimi olmadan dinamik CSS geçişi sağlanır.
+
+### Material 3 MPRIS Medya Oynatıcı (`media-player`)
+- Oynat/Duraklat, önceki/sonraki parça, karışık çalma (shuffle) ve tekrar (loop) kontrolleri.
+- Cairo ile yumuşatılmış köşelere sahip albüm kapağı gösterimi.
+- Tıklanabilir ve sürüklenebilir şarkı ilerleme çubuğu (seek bar).
+- Fare tekerleği ile ses düzeyi kontrolü.
+- Hızlı açılış ve odak kaybında otomatik kapanma.
+
+### Canlı Görev Yöneticisi ve Kaynak İzleyici (`task-manager`)
+- Donanım sensörlerinden canlı CPU sıcaklığı ve kullanım takibi.
+- CPU, RAM ve Çift GPU (NVIDIA + Intel) anlık durum kartları.
+- İşlemlerin hangi GPU'yu kullandığını tespit eden akıllı süreç izleme.
+- Süreç filtreleme, arama ve güvenli sonlandırma (SIGTERM).
+
+### Popover Sistem Araçları (Waybar Appletleri)
+- Wi-Fi Yöneticisi (`wifi-manager`): Ağ tarama, sinyal durumu ve bağlantı yönetimi.
+- Bluetooth Yöneticisi (`bluetooth-manager`): Cihaz eşleştirme, bağlantı ve tarama.
+- Ses Mikseri (`audio-mixer`): Giriş/çıkış cihazları ve uygulama bazlı ses denetimi.
+- Takvim (`calendar-app`): Hızlı ay ve tarih görünümü.
+- Güç ve Oturum Menüsü (`power-menu`, `power-session`): Pil sağlığı, Kafein (uyku önleyici) modu ve oturum seçenekleri.
+- Spotlight ve Pano (`spotlight-menu`, `clipboard-menu`): Uygulama başlatıcı ve pano geçmişi.
+
+---
+
+## Kurulum
+
+### Otomatik Kurulum
 
 ```bash
 git clone https://github.com/Baran-sys/hyprland-dotfiles.git ~/hyprland-dotfiles
@@ -51,59 +51,55 @@ chmod +x install.sh
 ./install.sh
 ```
 
-### Kurulum Betiğinin Yaptıkları:
-1. Gerekli Arch/CachyOS paketlerini kontrol eder ve eksikleri yükler (`paru`, `yay` veya `pacman`).
-2. Mevcut yapılandırmalarınızı `~/.config/hyprland-backup-TARIH/` altına güvenle yedekler.
-3. `.config` dosyalarını (`hypr`, `waybar`, `assets`, `dunst`, `kitty`, `tofi`, `rofi`, `wlogout`) yerleştirir.
-4. Özel Python appletlerini ve yardımcı araçları `~/.local/bin/` içine kopyalar ve çalıştırma izni verir.
-5. Paylaşılan kütüphaneleri (`libspotify-notray.so`) ve `.desktop` dosyalarını kurar.
-6. Aktif Hyprland oturumunu ve Waybar'ı anında yeniler.
+Kurulum betiği eksik paketleri denetler, mevcut yapılandırmalarınızı `~/.config/hyprland-backup-[TARIH]/` dizinine yedekler ve yeni dosyaları yerleştirir.
 
 ---
 
-## ⌨️ Temel Kısayollar
+## Temel Kısayollar
 
 | Kısayol | İşlev |
 |---|---|
-| `Super + T` | Terminali Aç (Kitty) |
-| `Super + Q` | Aktif Pencereyi Kapat |
-| `Super + E` | Dosya Yöneticisi (Dolphin) |
-| `Super + A` | Spotlight Uygulama Başlatıcı |
-| `Super + V` | Pano Geçmişi (Clipboard Manager) |
-| `Super + L` | Ekranı Kilitle (Hyprlock) ||
-| `PrintScreen` | Ekran Görüntüsü Al (Grimblast) |
+| Super + T | Terminal (Kitty) |
+| Super + Q | Aktif Pencereyi Kapat |
+| Super + E | Dosya Yöneticisi (Dolphin) |
+| Super + A | Spotlight Başlatıcı |
+| Super + V | Pano Geçmişi (Clipboard Manager) |
+| Super + L | Ekran Kilidi (Hyprlock) |
+| PrintScreen | Ekran Görüntüsü (Grimblast) |
 
 ---
 
-## 📂 Dizin Yapısı
+## Dizin Yapısı
 
 ```text
 hyprland-dotfiles/
 ├── .config/
+│   ├── assets/             # Duvar kağıtları ve arayüz görselleri
+│   ├── dunst/              # Bildirim temaları (açık / koyu)
+│   ├── gtk-3.0/            # GTK 3 tema ayarları ve stilleri
 │   ├── hypr/               # Hyprland, Hyprlock, Hypridle, Hyprpaper
-│   ├── waybar/             # Waybar şablonu ve CSS stilleri
-│   ├── assets/             # Duvar kağıtları ve wlogout simgeleri
-│   ├── dunst/              # Bildirim yöneticisi
 │   ├── kitty/              # Terminal yapılandırması
-│   ├── rofi/               # Spotlight ve Pano temaları
-│   ├── tofi/               # Minimal menü yapılandırması
-│   ├── wlogout/            # Çıkış ekranı düzeni ve stilleri
-│   └── spotify-flags.conf  # Spotify şifre sormama bayrakları
+│   ├── rofi/               # Spotlight ve Pano temaları (açık / koyu)
+│   ├── tofi/               # Minimal başlatıcı yapılandırması
+│   ├── waybar/             # Waybar şablonu, style-dark.css ve style-light.css
+│   ├── wlogout/            # Oturum kapatma menüsü stilleri
+│   └── xsettingsd/         # XSettingsD yapılandırması
 ├── .local/
-│   ├── bin/                # Material 3 & Popover Python GTK3 Appletleri
+│   ├── bin/                # Python GTK3 Appletleri ve yardımcı betikler
 │   ├── lib/                # libspotify-notray.so kütüphanesi
-│   └── share/applications/ # Özelleştirilmiş spotify.desktop
-├── install.sh              # Otomatik yedeklemeli kurulum betiği
+│   └── share/applications/ # Masaüstü kısayolları
+├── install.sh              # Otomatik kurulum ve yedekleme betiği
 └── README.md
 ```
 
 ---
 
+## Teşekkür ve Referanslar
 
-## 🙏 Teşekkür & Referanslar
-- **Temel Yapı:** [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) (Forked & customized)
-- **Renk Paleti:** [Catppuccin Mocha](https://github.com/catppuccin/catppuccin)
-- **Tasarım İlhamı:** Material Design 3 Expressive & macOS Popover Design
+- Temel Yapı: [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland)
+- Renk Paletleri: [Catppuccin Mocha & Latte](https://github.com/catppuccin/catppuccin)
+- Tasarım Dili: Material Design 3 Expressive ve macOS Popover
 
-## 📜 Lisans
-MIT License. Dilediğiniz gibi kullanabilir, özelleştirebilir ve paylaşabilirsiniz.
+## Lisans
+
+MIT License

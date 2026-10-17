@@ -1,25 +1,14 @@
 #!/usr/bin/env python3
 import sys
 import os
-import signal
-
-# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
-my_pid = os.getpid()
-my_name = os.path.basename(sys.argv[0])
-for pid_str in os.listdir('/proc'):
-    if pid_str.isdigit() and int(pid_str) != my_pid:
-        try:
-            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
-                cmd = pf.read().decode(errors='ignore')
-                if my_name in cmd and 'python' in cmd:
-                    os.kill(int(pid_str), signal.SIGTERM)
-                    sys.exit(0)
-        except Exception:
-            pass
+sys.path.insert(0, "/home/bren/.local/bin")
+from waybar_focus import SmartFocus, fast_toggle_or_lock
+fast_toggle_or_lock("task-manager")
 
 import sys
 import os
 import time
+import threading
 import glob
 import signal
 import psutil
@@ -30,6 +19,10 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
 
 CSS_STYLE = b"""
+* {
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
 window {
     background-color: #1e1e2e;
     color: #cdd6f4;
@@ -37,11 +30,20 @@ window {
     border-radius: 12px;
 }
 
+window.csd > box.vertical,
+window > box,
+.background.csd {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-radius: 0 0 12px 12px;
+}
+
 headerbar {
     background-color: #181825;
     border-bottom: 1px solid #313244;
     color: #cdd6f4;
     padding: 5px 12px;
+    border-radius: 12px 12px 0 0;
 }
 
 headerbar button {
@@ -175,6 +177,11 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        try:
+            from waybar_focus import SmartFocus
+            SmartFocus.setup(self)
+        except Exception:
+            pass
         self.selected_pid = None
         self.selected_name = ""
 
@@ -193,7 +200,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
 
         btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
         btn_refresh.set_tooltip_text("İşlem Listesini Yenile")
-        btn_refresh.connect("clicked", lambda b: self.refresh_processes())
+        btn_refresh.connect("clicked", lambda b: (self.refresh_metrics(), self.trigger_refresh()))
         self.header.pack_start(btn_refresh)
 
         # Metrics Row (CPU, RAM & GPU)
@@ -308,7 +315,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
 
         def _initial_load():
             self.refresh_metrics()
-            self.refresh_processes()
+            self.trigger_refresh()
             return False
 
         GLib.idle_add(_initial_load)
@@ -443,16 +450,30 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
 
             mem = psutil.virtual_memory()
             used_gb = mem.used / (1024**3)
-            tot_gb = mem.total / (1024**3)
             self.lbl_ram_v.set_text(f"{used_gb:.1f}G (%{mem.percent:.0f})")
             self.pb_ram.set_fraction(min(max(mem.percent / 100.0, 0.0), 1.0))
+        except Exception:
+            pass
 
+    def trigger_refresh(self):
+        if getattr(self, "_is_refreshing", False):
+            return
+        self._is_refreshing = True
+        threading.Thread(target=self._worker_collect_data, daemon=True).start()
+
+    def _worker_collect_data(self):
+        try:
+            # 1. GPU metrics & processes
+            now = time.time()
+            gpu_devices = {}
+            gpu_usage = {}
             nv_util = 0
             nv_temp = 0
+
             try:
                 out = subprocess.check_output(
                     ["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
-                    text=True, timeout=0.3
+                    text=True, timeout=0.25
                 ).strip()
                 parts = [p.strip() for p in out.split(",")]
                 if len(parts) >= 2:
@@ -469,138 +490,132 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             except Exception:
                 pass
 
+            # NVIDIA process tracking
+            try:
+                res = subprocess.run(["nvidia-smi", "pmon", "-c", "1"], capture_output=True, text=True, timeout=0.25)
+                for line in res.stdout.splitlines():
+                    if line.startswith("#") or not line.strip():
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 5 and parts[1].isdigit():
+                        pid = int(parts[1])
+                        sm = parts[3]
+                        pct = float(sm) if sm.isdigit() else 0.0
+                        gpu_usage[pid] = pct
+                        gpu_devices.setdefault(pid, set()).add("NVIDIA")
+            except Exception:
+                pass
+
+            try:
+                res = subprocess.run(["nvidia-smi", "-q", "-d", "PIDS"], capture_output=True, text=True, timeout=0.25)
+                for line in res.stdout.splitlines():
+                    if "Process ID" in line:
+                        parts = line.split(":")
+                        if len(parts) >= 2 and parts[1].strip().isdigit():
+                            curr_pid = int(parts[1].strip())
+                            gpu_devices.setdefault(curr_pid, set()).add("NVIDIA")
+            except Exception:
+                pass
+
+            # Intel i915 DRM fdinfo tracking (fast background scan)
+            new_intel_times = {}
+            for pid_dir in glob.glob("/proc/[0-9]*"):
+                fdinfo = os.path.join(pid_dir, "fdinfo")
+                if not os.path.exists(fdinfo):
+                    continue
+                try:
+                    pid = int(os.path.basename(pid_dir))
+                    total_ns = 0
+                    is_intel = False
+                    for f in os.listdir(fdinfo):
+                        try:
+                            with open(os.path.join(fdinfo, f), "r") as fp:
+                                for line in fp:
+                                    if "drm-driver:\ti915" in line:
+                                        is_intel = True
+                                    elif line.startswith("drm-engine-"):
+                                        pts = line.split()
+                                        if len(pts) >= 2 and pts[1].isdigit():
+                                            total_ns += int(pts[1])
+                        except Exception:
+                            pass
+                    if is_intel:
+                        gpu_devices.setdefault(pid, set()).add("Intel")
+                        new_intel_times[pid] = (now, total_ns)
+                        if pid in self.intel_gpu_times:
+                            prev_time, prev_ns = self.intel_gpu_times[pid]
+                            dt = now - prev_time
+                            if dt > 0.3:
+                                diff_ns = max(0, total_ns - prev_ns)
+                                pct = (diff_ns / (dt * 1_000_000_000)) * 100.0
+                                pct = min(pct, 100.0)
+                                gpu_usage[pid] = max(gpu_usage.get(pid, 0.0), round(pct, 1))
+                except Exception:
+                    pass
+
+            self.intel_gpu_times = new_intel_times
+
+            # 2. Process list
+            new_data = []
+            gpu_count = 0
+
+            for p in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'memory_info']):
+                try:
+                    info = p.info
+                    pid = info['pid']
+                    name = info['name'] or f"proc_{pid}"
+                    cpu = info['cpu_percent'] or 0.0
+                    mem_mb = (info['memory_info'].rss / (1024*1024)) if info['memory_info'] else 0.0
+                    user = info['username'] or ""
+
+                    dev_set = gpu_devices.get(pid, set())
+                    g_pct = gpu_usage.get(pid, 0.0)
+
+                    if "NVIDIA" in dev_set and "Intel" in dev_set:
+                        dev_str = "Hibrit"
+                        markup = "<span foreground='#cba6f7' weight='bold'>Hibrit</span>"
+                        gpu_count += 1
+                    elif "NVIDIA" in dev_set:
+                        dev_str = "NVIDIA"
+                        markup = "<span foreground='#a6e3a1' weight='bold'>NVIDIA</span>"
+                        gpu_count += 1
+                    elif "Intel" in dev_set:
+                        dev_str = "Intel"
+                        markup = "<span foreground='#89b4fa' weight='bold'>Intel</span>"
+                        gpu_count += 1
+                    else:
+                        dev_str = "-"
+                        markup = "<span foreground='#585b70'>-</span>"
+
+                    new_data.append((pid, name, cpu, mem_mb, g_pct, dev_str, user, markup))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            # 3. Post to GTK main thread
+            GLib.idle_add(self._apply_data, new_data, gpu_count, nv_util, nv_temp, intel_mhz)
+        finally:
+            self._is_refreshing = False
+
+    def _apply_data(self, new_data, gpu_count, nv_util, nv_temp, intel_mhz):
+        try:
             gpu_disp = max(nv_util, int(round((intel_mhz / 1400.0) * 100))) if intel_mhz > 0 else nv_util
             self.lbl_gpu_v.set_text(f"%{gpu_disp} (NV: {nv_temp}°C)")
             self.pb_gpu.set_fraction(min(max(gpu_disp / 100.0, 0.0), 1.0))
 
+            cpu_pct = psutil.cpu_percent()
+            cpu_temp = self.get_cpu_temp()
+            temp_str = f" ({cpu_temp}°C)" if cpu_temp is not None else ""
+            mem = psutil.virtual_memory()
             gpu_temp_str = f" ({nv_temp}°C)" if nv_temp > 0 else ""
             self.header.set_subtitle(f"CPU: %{cpu_pct:.0f}{temp_str}  •  RAM: %{mem.percent:.0f}  •  GPU: %{gpu_disp}{gpu_temp_str}")
+
+            self.store.clear()
+            for row in new_data:
+                self.store.append(row)
+
+            self.lbl_proc_count.set_text(f"{len(new_data)} işlem ({gpu_count} GPU)")
         except Exception:
             pass
-
-    def get_gpu_processes(self):
-        now = time.time()
-        gpu_devices = {} # pid -> set of ("NVIDIA", "Intel")
-        gpu_usage = {}   # pid -> float %
-
-        # 1. Check NVIDIA via nvidia-smi pmon
-        try:
-            res = subprocess.run(["nvidia-smi", "pmon", "-c", "1"], capture_output=True, text=True, timeout=0.3)
-            for line in res.stdout.splitlines():
-                if line.startswith("#") or not line.strip():
-                    continue
-                parts = line.split()
-                if len(parts) >= 5 and parts[1].isdigit():
-                    pid = int(parts[1])
-                    sm = parts[3]
-                    pct = float(sm) if sm.isdigit() else 0.0
-                    gpu_usage[pid] = pct
-                    gpu_devices.setdefault(pid, set()).add("NVIDIA")
-        except Exception:
-            pass
-
-        # Also check nvidia-smi -q -d PIDS
-        try:
-            res = subprocess.run(["nvidia-smi", "-q", "-d", "PIDS"], capture_output=True, text=True, timeout=0.3)
-            for line in res.stdout.splitlines():
-                if "Process ID" in line:
-                    parts = line.split(":")
-                    if len(parts) >= 2 and parts[1].strip().isdigit():
-                        curr_pid = int(parts[1].strip())
-                        gpu_devices.setdefault(curr_pid, set()).add("NVIDIA")
-        except Exception:
-            pass
-
-        # 2. Check Intel i915 DRM fdinfo & compute engine utilization
-        new_intel_times = {}
-        for pid_dir in glob.glob("/proc/[0-9]*"):
-            fdinfo = os.path.join(pid_dir, "fdinfo")
-            if not os.path.exists(fdinfo):
-                continue
-            try:
-                pid = int(os.path.basename(pid_dir))
-                total_ns = 0
-                is_intel = False
-                for f in os.listdir(fdinfo):
-                    try:
-                        with open(os.path.join(fdinfo, f), "r") as fp:
-                            for line in fp:
-                                if "drm-driver:\ti915" in line:
-                                    is_intel = True
-                                elif line.startswith("drm-engine-"):
-                                    pts = line.split()
-                                    if len(pts) >= 2 and pts[1].isdigit():
-                                        total_ns += int(pts[1])
-                    except Exception:
-                        pass
-                if is_intel:
-                    gpu_devices.setdefault(pid, set()).add("Intel")
-                    new_intel_times[pid] = (now, total_ns)
-                    if pid in self.intel_gpu_times:
-                        prev_time, prev_ns = self.intel_gpu_times[pid]
-                        dt = now - prev_time
-                        if dt > 0.3:
-                            diff_ns = max(0, total_ns - prev_ns)
-                            pct = (diff_ns / (dt * 1_000_000_000)) * 100.0
-                            pct = min(pct, 100.0)
-                            gpu_usage[pid] = max(gpu_usage.get(pid, 0.0), round(pct, 1))
-            except Exception:
-                pass
-
-        self.intel_gpu_times = new_intel_times
-        return gpu_devices, gpu_usage
-
-    def refresh_processes(self):
-        gpu_devices, gpu_usage = self.get_gpu_processes()
-
-        new_data = []
-        gpu_count = 0
-
-        for p in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'memory_info']):
-            try:
-                info = p.info
-                pid = info['pid']
-                name = info['name'] or f"proc_{pid}"
-                cpu = info['cpu_percent'] or 0.0
-                mem_mb = (info['memory_info'].rss / (1024*1024)) if info['memory_info'] else 0.0
-                user = info['username'] or ""
-
-                dev_set = gpu_devices.get(pid, set())
-                g_pct = gpu_usage.get(pid, 0.0)
-
-                if "NVIDIA" in dev_set and "Intel" in dev_set:
-                    dev_str = "Hibrit"
-                    markup = "<span foreground='#cba6f7' weight='bold'>Hibrit</span>"
-                    gpu_count += 1
-                elif "NVIDIA" in dev_set:
-                    dev_str = "NVIDIA"
-                    markup = "<span foreground='#a6e3a1' weight='bold'>NVIDIA</span>"
-                    gpu_count += 1
-                elif "Intel" in dev_set:
-                    dev_str = "Intel"
-                    markup = "<span foreground='#89b4fa' weight='bold'>Intel</span>"
-                    gpu_count += 1
-                else:
-                    dev_str = "-"
-                    markup = "<span foreground='#585b70'>-</span>"
-
-                # Store row: pid, name, cpu, mem_mb, g_pct, dev_str, user, markup
-                new_data.append((pid, name, cpu, mem_mb, g_pct, dev_str, user, markup))
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-
-        # Update store
-        self.store.clear()
-        for row in new_data:
-            self.store.append(row)
-
-        self.lbl_proc_count.set_text(f"{len(new_data)} işlem ({gpu_count} GPU)")
-
-    def on_timer_refresh(self):
-        if self.get_visible():
-            self.refresh_metrics()
-            self.refresh_processes()
-        return True
 
     def on_search_changed(self, entry):
         self.filter_model.refilter()
@@ -665,7 +680,7 @@ class TaskManagerApp(Gtk.Application):
     def do_activate(self):
         if not self.window:
             css_provider = Gtk.CssProvider()
-            css_provider.load_from_data(CSS_STYLE)
+            css_provider.load_from_data(SmartFocus.get_themed_css(CSS_STYLE))
             screen = Gdk.Screen.get_default()
             Gtk.StyleContext.add_provider_for_screen(
                 screen,

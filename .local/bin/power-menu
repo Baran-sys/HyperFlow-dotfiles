@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
 import sys
 import os
-import signal
-
-# Fast single-instance toggle: Close existing instance in <5ms without loading GTK
-my_pid = os.getpid()
-my_name = os.path.basename(sys.argv[0])
-for pid_str in os.listdir('/proc'):
-    if pid_str.isdigit() and int(pid_str) != my_pid:
-        try:
-            with open(f'/proc/{pid_str}/cmdline', 'rb') as pf:
-                cmd = pf.read().decode(errors='ignore')
-                if my_name in cmd and 'python' in cmd:
-                    os.kill(int(pid_str), signal.SIGTERM)
-                    sys.exit(0)
-        except Exception:
-            pass
+sys.path.insert(0, "/home/bren/.local/bin")
+from waybar_focus import SmartFocus, fast_toggle_or_lock
+fast_toggle_or_lock("power-menu")
 
 import sys
 import os
 import re
 import json
 import subprocess
+import threading
 import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
 
 CSS_STYLE = b"""
+* {
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+}
+
 window {
     background-color: #1e1e2e;
     color: #cdd6f4;
@@ -35,11 +28,20 @@ window {
     border-radius: 12px;
 }
 
+window.csd > box.vertical,
+window > box,
+.background.csd {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-radius: 0 0 12px 12px;
+}
+
 headerbar {
     background-color: #181825;
     border-bottom: 1px solid #313244;
     color: #cdd6f4;
     padding: 5px 12px;
+    border-radius: 12px 12px 0 0;
 }
 
 headerbar button {
@@ -96,12 +98,12 @@ row:hover {
 }
 
 .profile-active {
-    background: rgba(166, 227, 161, 0.15);
-    border: 1px solid rgba(166, 227, 161, 0.4);
+    background: rgba(137, 180, 250, 0.15);
+    border: 1px solid rgba(137, 180, 250, 0.4);
 }
 
 .profile-active:hover {
-    background: rgba(166, 227, 161, 0.22);
+    background: rgba(137, 180, 250, 0.22);
 }
 
 .hz-active {
@@ -181,9 +183,15 @@ row:hover {
 }
 
 .btn-caffeine-active {
-    background: rgba(166, 227, 161, 0.25);
-    color: #a6e3a1;
-    border-color: #a6e3a1;
+    background: rgba(137, 180, 250, 0.20);
+    color: #89b4fa;
+    border-color: #89b4fa;
+}
+
+.btn-caffeine-active:hover {
+    background: rgba(137, 180, 250, 0.30);
+    color: #89b4fa;
+    border-color: #89b4fa;
 }
 
 .status-bar {
@@ -241,6 +249,11 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
+        try:
+            from waybar_focus import SmartFocus
+            SmartFocus.setup(self)
+        except Exception:
+            pass
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(main_box)
@@ -386,39 +399,13 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         time_badge = ""
         badge_style = "badge-time"
         time_detail = ""
-
+        # Instant sysfs calculation
         try:
-            out = subprocess.check_output(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT1"], text=True, timeout=1)
-            tte = re.search(r'time to empty:\s*([^\n]+)', out)
-            ttf = re.search(r'time to full:\s*([^\n]+)', out)
-
-            if tte:
-                raw = tte.group(1).strip()
-                raw_tr = raw.replace('hours', 'saat').replace('hour', 'saat').replace('minutes', 'dk').replace('minute', 'dk')
-                time_badge = f"⏱ {raw_tr} kaldı"
-                badge_style = "badge-discharging"
-                time_detail = f"Kalan Pil Süresi: ~{raw_tr}"
-            elif ttf:
-                raw = ttf.group(1).strip()
-                raw_tr = raw.replace('hours', 'saat').replace('hour', 'saat').replace('minutes', 'dk').replace('minute', 'dk')
-                time_badge = f"⚡ {raw_tr} doluma"
-                badge_style = "badge-time"
-                time_detail = f"Tam Doluma Kalan Süre: ~{raw_tr}"
-            elif status == "Full" or "fully-charged" in out:
+            if status == "Full":
                 time_badge = "Prizde • Tam Dolu"
                 badge_style = "badge-full"
                 time_detail = "Pil tam dolu, şarj aleti takılı"
-            elif status == "Charging":
-                time_badge = "⚡ Şarj Oluyor"
-                badge_style = "badge-time"
-                time_detail = "Cihaz şarj ediliyor"
             else:
-                time_badge = "Pilde"
-                badge_style = "badge-discharging"
-                time_detail = "Pil gücüyle çalışıyor"
-        except Exception:
-            # Fallback calculation using sysfs charge and current
-            try:
                 c_now = int(open("/sys/class/power_supply/BAT1/charge_now").read().strip())
                 curr = int(open("/sys/class/power_supply/BAT1/current_now").read().strip())
                 c_full = int(open("/sys/class/power_supply/BAT1/charge_full").read().strip())
@@ -426,18 +413,27 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                     if status == "Discharging":
                         mins = int((c_now / curr) * 60)
                         h, m = divmod(mins, 60)
-                        time_badge = f"⏱ {h}s {m}dk kaldı" if h else f"⏱ {m}dk kaldı"
+                        time_badge = f"{h} sa {m} dk kaldı" if h else f"{m} dk kaldı"
                         badge_style = "badge-discharging"
                         time_detail = f"Kalan Pil Süresi: ~{h} saat {m} dakika"
                     elif status == "Charging":
                         mins = int(((c_full - c_now) / curr) * 60)
                         h, m = divmod(mins, 60)
-                        time_badge = f"⚡ {h}s {m}dk doluma" if h else f"⚡ {m}dk doluma"
+                        time_badge = f"{h} sa {m} dk doluma" if h else f"{m} dk doluma"
                         badge_style = "badge-time"
                         time_detail = f"Tam Doluma Kalan Süre: ~{h} saat {m} dakika"
-            except Exception:
-                pass
-
+                elif status == "Charging":
+                    time_badge = "Şarj Oluyor"
+                    badge_style = "badge-time"
+                    time_detail = "Cihaz şarj ediliyor"
+                else:
+                    time_badge = "Prizde"
+                    badge_style = "badge-full"
+                    time_detail = "Prizde çalışıyor"
+        except Exception:
+            time_badge = "Pilde"
+            badge_style = "badge-discharging"
+            time_detail = "Pil gücüyle çalışıyor"
         return time_badge, badge_style, time_detail
 
     def get_battery_icon(self, cap_int, status):
@@ -532,7 +528,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             hbox.pack_start(vbox, True, True, 0)
 
             if is_active:
-                badge = Gtk.Label(label="✓ Aktif")
+                badge = Gtk.Label(label="Aktif")
                 badge.get_style_context().add_class("badge-hz-active")
                 badge.set_valign(Gtk.Align.CENTER)
                 hbox.pack_end(badge, False, False, 0)
@@ -544,7 +540,12 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 hbox.pack_end(btn_set, False, False, 0)
 
             row.add(hbox)
-            row.connect("button-press-event", lambda w, e, hz=r["hz"]: self.set_refresh_rate(hz) if e.button == 1 else None)
+            def _on_hz_click(w, e, hz=r["hz"]):
+                if e.button == 1:
+                    self.set_refresh_rate(hz)
+                    return True
+                return False
+            row.connect("button-press-event", _on_hz_click)
             self.listbox_hz.add(row)
 
         # Repopulate Power Profiles
@@ -575,7 +576,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             hbox.pack_start(vbox, True, True, 0)
 
             if is_active:
-                badge = Gtk.Label(label="✓ Aktif")
+                badge = Gtk.Label(label="Aktif")
                 badge.get_style_context().add_class("badge-active")
                 badge.set_valign(Gtk.Align.CENTER)
                 hbox.pack_end(badge, False, False, 0)
@@ -587,40 +588,49 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 hbox.pack_end(btn_set, False, False, 0)
 
             row.add(hbox)
-            row.connect("button-press-event", lambda w, e, pid=p["id"]: self.set_profile(pid) if e.button == 1 else None)
+            def _on_prof_click(w, e, pid=p["id"]):
+                if e.button == 1:
+                    self.set_profile(pid)
+                    return True
+                return False
+            row.connect("button-press-event", _on_prof_click)
             self.listbox_prof.add(row)
 
         self.listbox_hz.show_all()
         self.listbox_prof.show_all()
 
     def set_profile(self, profile_id):
-        try:
-            subprocess.run(["powerprofilesctl", "set", profile_id], check=True)
-            self.refresh_ui()
-        except Exception:
-            pass
+        def _apply_prof():
+            try:
+                subprocess.run(["powerprofilesctl", "set", profile_id], check=True)
+            except Exception as e:
+                print(f"Error setting power profile: {e}")
+            GLib.idle_add(self.refresh_ui)
+
+        threading.Thread(target=_apply_prof, daemon=True).start()
 
     def set_refresh_rate(self, hz):
-        try:
-            subprocess.run(["hyprctl", "keyword", "monitor", f"eDP-1,1920x1080@{hz},auto,1.25"], check=True)
+        def _apply_hz():
+            try:
+                subprocess.run(["hyprctl", "keyword", "monitor", f"eDP-1,1920x1080@{hz},auto,1.25"], check=True)
 
-            conf_path = os.path.expanduser("~/.config/hypr/hyprland.conf")
-            if os.path.exists(conf_path):
-                with open(conf_path, "r") as f:
-                    lines = f.readlines()
-                new_lines = []
-                for line in lines:
-                    if line.strip().startswith("monitor=eDP-1,"):
-                        new_lines.append(f"monitor=eDP-1,1920x1080@{hz},auto,1.25\n")
-                    else:
-                        new_lines.append(line)
-                with open(conf_path, "w") as f:
-                    f.writelines(new_lines)
+                conf_path = os.path.expanduser("~/.config/hypr/hyprland.conf")
+                if os.path.exists(conf_path):
+                    with open(conf_path, "r") as f:
+                        lines = f.readlines()
+                    new_lines = []
+                    for line in lines:
+                        if line.strip().startswith("monitor=eDP-1,"):
+                            new_lines.append(f"monitor=eDP-1,1920x1080@{hz},auto,1.25\n")
+                        else:
+                            new_lines.append(line)
+                    with open(conf_path, "w") as f:
+                        f.writelines(new_lines)
+            except Exception as e:
+                print(f"Error setting refresh rate: {e}")
+            GLib.idle_add(self.refresh_ui)
 
-            GLib.timeout_add(200, self.refresh_ui)
-        except Exception:
-            pass
-
+        threading.Thread(target=_apply_hz, daemon=True).start()
 
 class PowerMenuApp(Gtk.Application):
     def __init__(self):
@@ -633,7 +643,7 @@ class PowerMenuApp(Gtk.Application):
     def do_activate(self):
         if not self.window:
             css_provider = Gtk.CssProvider()
-            css_provider.load_from_data(CSS_STYLE)
+            css_provider.load_from_data(SmartFocus.get_themed_css(CSS_STYLE))
             screen = Gdk.Screen.get_default()
             Gtk.StyleContext.add_provider_for_screen(
                 screen,

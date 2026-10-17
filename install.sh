@@ -95,7 +95,7 @@ backup_configs() {
     echo -e "\n${BLUE}[2/5] Mevcut yapılandırmalar yedekleniyor...${NC}"
     mkdir -p "$BACKUP_DIR"
 
-    CONFIGS_TO_BACKUP=(hypr waybar assets dunst kitty tofi rofi wlogout)
+    CONFIGS_TO_BACKUP=(hypr waybar assets dunst kitty tofi rofi wlogout gtk-3.0 xsettingsd)
     for cfg in "${CONFIGS_TO_BACKUP[@]}"; do
         if [ -e "${HOME}/.config/${cfg}" ]; then
             cp -ra "${HOME}/.config/${cfg}" "${BACKUP_DIR}/"

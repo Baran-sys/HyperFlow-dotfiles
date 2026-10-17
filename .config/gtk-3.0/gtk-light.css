@@ -1,0 +1,84 @@
+/* ==========================================================================
+   macOS Consistency Design System - Catppuccin Latte
+   ========================================================================== */
+
+* {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+}
+
+/* Minimal macOS-style Floating Scrollbars */
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+scrollbar slider {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    min-width: 5px;
+    min-height: 22px;
+    border: none;
+    transition: background-color 150ms ease;
+}
+
+scrollbar slider:hover {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+/* macOS-style Toggle Switches */
+switch {
+    background-color: #ccd0da;
+    border-radius: 12px;
+    border: 1px solid #bcc0cc;
+    min-width: 38px;
+    min-height: 20px;
+    transition: all 150ms ease;
+}
+
+switch:checked {
+    background-color: #1e66f5;
+    border-color: #1e66f5;
+}
+
+switch slider {
+    background-color: #ffffff;
+    border-radius: 10px;
+    min-width: 16px;
+    min-height: 16px;
+    margin: 2px;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* macOS-style Sliders (GtkScale) */
+scale trough {
+    background-color: #ccd0da;
+    border-radius: 4px;
+    min-height: 6px;
+    border: none;
+}
+
+scale highlight {
+    background-color: #1e66f5;
+    border-radius: 4px;
+    min-height: 6px;
+}
+
+scale slider {
+    background-color: #ffffff;
+    border-radius: 50%;
+    min-width: 16px;
+    min-height: 16px;
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Tooltips */
+tooltip {
+    background-color: #eff1f5;
+    color: #4c4f69;
+    border: 1px solid #bcc0cc;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+}

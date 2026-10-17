@@ -53,7 +53,8 @@ def get_media_info():
             display_text = display_text[:25] + "…"
 
         full_text = f"{icon}  {display_text}"
-        tooltip = f"{player_name.capitalize()} ({status})\n{title}\nSanatçı: {artist}\nAlbüm: {album}"
+        parts = [p for p in [title, artist, album] if p]
+        tooltip = chr(10).join(parts) if parts else player_name.capitalize()
 
         return {
             "text": full_text,

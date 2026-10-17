@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+export PATH="/home/bren/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:$PATH"
+LOGFILE="/tmp/toggle-theme.log"
+
+# Mutex to debounce rapid clicks
+exec 200>/tmp/toggle-theme.lock
+flock -n 200 || {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Another instance of toggle-theme is already running, exiting." >> "$LOGFILE"
+    exit 0
+}
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Theme toggle started by PID $$, PPID $PPID ($(ps -p $PPID -o comm= 2>/dev/null))" >> "$LOGFILE"
+
+THEME_MODE_FILE="$HOME/.config/theme-mode"
+
+apply_wallpaper() {
+    local wp="$1"
+    local wp_blurred="$2"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Applying wallpaper: $wp" >> "$LOGFILE"
+
+    # 1. Update hyprpaper configuration
+    cat << HP_EOF > "$HOME/.config/hypr/hyprpaper.conf"
+wallpaper {
+    monitor = eDP-1
+    path = $wp
+    fit_mode = cover
+}
+
+wallpaper {
+    monitor = 
+    path = $wp
+    fit_mode = cover
+}
+splash = false
+HP_EOF
+
+    # 2. Update hyprlock lockscreen wallpaper
+    sed -i "s|cat_leaves_blurred.*\.png|$wp_blurred|" "$HOME/.config/hypr/hyprlock.conf" 2>/dev/null || true
+
+    # 3. Dynamically set wallpaper with hyprctl hyprpaper
+    local success=false
+    if pgrep -x hyprpaper >/dev/null 2>&1; then
+        if hyprctl hyprpaper wallpaper "eDP-1,${wp},cover" >>"$LOGFILE" 2>&1; then
+            success=true
+            local MONITORS
+            MONITORS=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || echo "eDP-1")
+            for mon in $MONITORS; do
+                if [ "$mon" != "eDP-1" ]; then
+                    hyprctl hyprpaper wallpaper "${mon},${wp},cover" >/dev/null 2>&1 || true
+                fi
+            done
+        fi
+    fi
+
+    # 4. If hyprpaper is not running or IPC/socket failed, restart it cleanly
+    if [ "$success" != "true" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Hyprpaper IPC failed or not running, restarting hyprpaper..." >> "$LOGFILE"
+        killall -9 hyprpaper 2>/dev/null || true
+        rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr"/*/.hyprpaper.sock 2>/dev/null || true
+        hyprctl dispatch exec hyprpaper >/dev/null 2>&1 || nohup hyprpaper >/dev/null 2>&1 &
+        sleep 0.4
+    fi
+
+    # 5. Support swww if running
+    if pgrep -x swww-daemon >/dev/null 2>&1 || pgrep -x awww-daemon >/dev/null 2>&1; then
+        swww img "$wp" --transition-type fade 2>/dev/null || true
+    fi
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Wallpaper applied successfully." >> "$LOGFILE"
+}
+
+# Determine current and target theme
+current="dark"
+if [ -f "$THEME_MODE_FILE" ]; then
+    current=$(cat "$THEME_MODE_FILE" | tr -d '[:space:]')
+else
+    gsettings_scheme=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'")
+    if [ "$gsettings_scheme" = "prefer-light" ]; then
+        current="light"
+    fi
+fi
+
+if [ "$current" = "light" ]; then
+    TARGET="dark"
+    WP="/home/bren/.config/assets/backgrounds/cat_leaves.png"
+    WP_BLUR="cat_leaves_blurred.png"
+    COLOR_SCHEME="prefer-dark"
+    GTK_THEME="Catppuccin-Mocha"
+    BORDER_ACTIVE="rgb(cba6f7)"
+    BORDER_INACTIVE="rgba(585b7080)"
+    DARK_PREF="1"
+    QT_CUSTOM="true"
+    KVANTUM_THEME="wallbash"
+    KDE_SCHEME="Noctalia"
+    KDE_SRC="$HOME/.config/kdeglobals.mocha"
+    NOTIF_TITLE="Koyu Mod"
+    NOTIF_ICON="weather-clear-night-symbolic"
+    NOTIF_TEXT="Koyu tema (Catppuccin Mocha) aktif edildi."
+    KITTY_THEME="Catppuccin-Mocha"
+else
+    TARGET="light"
+    WP="/home/bren/.config/assets/backgrounds/cat_leaves_light.png"
+    WP_BLUR="cat_leaves_blurred_light.png"
+    COLOR_SCHEME="prefer-light"
+    GTK_THEME="Catppuccin-Latte"
+    BORDER_ACTIVE="rgb(cba6f7)"
+    BORDER_INACTIVE="rgba(585b7080)"
+    DARK_PREF="0"
+    QT_CUSTOM="false"
+    KVANTUM_THEME="KvFlatLight"
+    KDE_SCHEME="BreezeLight"
+    KDE_SRC="$HOME/.config/kdeglobals.latte"
+    NOTIF_TITLE="Açık Mod"
+    NOTIF_ICON="weather-clear-symbolic"
+    NOTIF_TEXT="Açık tema (Catppuccin Latte) aktif edildi."
+    KITTY_THEME="Catppuccin-Latte"
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Switching from $current to $TARGET" >> "$LOGFILE"
+echo "$TARGET" > "$THEME_MODE_FILE"
+
+# === 1. DUVAR KAGIDI (Aninda degisim) ===
+apply_wallpaper "$WP" "$WP_BLUR"
+
+# === 2. DESKTOP APPEARANCE & WAYBAR (Aninda XDG portal ile gecis) ===
+# Waybar watches org.freedesktop.appearance and switches between style-dark.css / style-light.css instantly
+gsettings set org.gnome.desktop.interface color-scheme "$COLOR_SCHEME" 2>/dev/null || true
+gsettings set org.gnome.desktop.interface gtk-theme "$GTK_THEME" 2>/dev/null || true
+
+# Also sync style.css for any other tool or fallback
+if [ -f "$HOME/.config/waybar/style-$TARGET.css" ]; then
+    cp "$HOME/.config/waybar/style-$TARGET.css" "$HOME/.config/waybar/style.css" 2>/dev/null || true
+fi
+
+# === 3. BILDIRIM ===
+notify-send -t 1500 -a "Tema" -i "$NOTIF_ICON" "$NOTIF_TITLE" "$NOTIF_TEXT" 2>/dev/null || true
+
+# === 4. HYPRLAND PENCERE KENARLIKLARI ===
+hyprctl keyword general:col.active_border "$BORDER_ACTIVE" 2>/dev/null || true
+hyprctl keyword general:col.inactive_border "$BORDER_INACTIVE" 2>/dev/null || true
+
+# === 5. GTK 3 & 4 SETTINGS.INI VE GTK.CSS ===
+for ini in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
+    if [ -f "$ini" ]; then
+        sed -i "s/gtk-theme-name=.*/gtk-theme-name=$GTK_THEME/" "$ini" 2>/dev/null || true
+        sed -i "s/gtk-application-prefer-dark-theme=.*/gtk-application-prefer-dark-theme=$DARK_PREF/" "$ini" 2>/dev/null || true
+    fi
+done
+if [ -f "$HOME/.gtkrc-2.0" ]; then
+    sed -i "s/gtk-theme-name=.*/gtk-theme-name=\"$GTK_THEME\"/" "$HOME/.gtkrc-2.0" 2>/dev/null || true
+fi
+if [ -f "$HOME/.config/gtk-3.0/gtk-$TARGET.css" ]; then
+    cp "$HOME/.config/gtk-3.0/gtk-$TARGET.css" "$HOME/.config/gtk-3.0/gtk.css" 2>/dev/null || true
+fi
+
+# === 6. XSETTINGSD ===
+if [ -f "$HOME/.config/xsettingsd/xsettingsd.conf" ]; then
+    sed -i "s/Net\/ThemeName .*/Net\/ThemeName \"$GTK_THEME\"/" "$HOME/.config/xsettingsd/xsettingsd.conf" 2>/dev/null || true
+    killall -HUP xsettingsd 2>/dev/null || true
+fi
+
+# === 7. SPOTLIGHT & CLIPBOARD (ROFI) ===
+if [ -f "$HOME/.config/rofi/spotlight-$TARGET.rasi" ]; then
+    cp "$HOME/.config/rofi/spotlight-$TARGET.rasi" "$HOME/.config/rofi/spotlight.rasi" 2>/dev/null || true
+fi
+if [ -f "$HOME/.config/rofi/clipboard-$TARGET.rasi" ]; then
+    cp "$HOME/.config/rofi/clipboard-$TARGET.rasi" "$HOME/.config/rofi/clipboard.rasi" 2>/dev/null || true
+fi
+
+# === 8. WAYBAR APPLETLERI ===
+pkill -f "python.*(calendar-app|wifi-manager|bluetooth-manager|task-manager|audio-mixer|power-menu|media-player|power-session)" 2>/dev/null || true
+rm -f /tmp/waybar_applets/*.pid 2>/dev/null || true
+
+# === 9. DOLPHIN & QT / KDE APPS ===
+HAD_DOLPHIN=false
+if pgrep -x dolphin >/dev/null 2>&1; then
+    HAD_DOLPHIN=true
+fi
+if [ -f "$KDE_SRC" ]; then
+    cp "$KDE_SRC" "$HOME/.config/kdeglobals" 2>/dev/null || true
+fi
+kwriteconfig6 --file kdeglobals --group General --key ColorScheme "$KDE_SCHEME" 2>/dev/null || true
+if [ -f "$HOME/.config/Kvantum/kvantum.kvconfig" ]; then
+    sed -i "s/theme=.*/theme=$KVANTUM_THEME/" "$HOME/.config/Kvantum/kvantum.kvconfig" 2>/dev/null || true
+fi
+if [ -f "$HOME/.config/qt6ct/qt6ct.conf" ]; then
+    sed -i "s/custom_palette=.*/custom_palette=$QT_CUSTOM/" "$HOME/.config/qt6ct/qt6ct.conf" 2>/dev/null || true
+fi
+if [ -f "$HOME/.config/qt5ct/qt5ct.conf" ]; then
+    sed -i "s/custom_palette=.*/custom_palette=$QT_CUSTOM/" "$HOME/.config/qt5ct/qt5ct.conf" 2>/dev/null || true
+fi
+if [ "$HAD_DOLPHIN" = "true" ]; then
+    killall -9 dolphin 2>/dev/null || true
+    sleep 0.2
+    nohup dolphin >/dev/null 2>&1 &
+fi
+
+# === 10. BILDIRIMLER (MAKO & DUNST) ===
+if [ -f "$HOME/.config/mako/config-$TARGET" ]; then
+    cp "$HOME/.config/mako/config-$TARGET" "$HOME/.config/mako/config" 2>/dev/null || true
+    makoctl reload 2>/dev/null || true
+fi
+if [ -f "$HOME/.config/dunst/dunstrc.$TARGET" ]; then
+    cp "$HOME/.config/dunst/dunstrc.$TARGET" "$HOME/.config/dunst/dunstrc" 2>/dev/null || true
+    killall dunst 2>/dev/null || true
+fi
+
+# === 11. WLOGOUT ===
+if [ -f "$HOME/.config/wlogout/style-$TARGET.css" ]; then
+    cp "$HOME/.config/wlogout/style-$TARGET.css" "$HOME/.config/wlogout/style.css" 2>/dev/null || true
+fi
+
+# === 12. KITTY TERMINAL ===
+if command -v kitty >/dev/null 2>&1; then
+    kitty +kitten themes --dump-theme "$KITTY_THEME" > "$HOME/.config/kitty/theme.conf" 2>/dev/null || true
+    killall -SIGUSR1 kitty 2>/dev/null || true
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Theme toggle finished successfully." >> "$LOGFILE"

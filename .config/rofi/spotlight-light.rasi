@@ -1,0 +1,117 @@
+configuration {
+    modi: "drun,run,filebrowser";
+    show-icons: true;
+    icon-theme: "Tela-circle-dracula";
+    display-drun: " ";
+    display-run: " ";
+    display-filebrowser: " ";
+    drun-display-format: "{name}";
+    font: "JetBrainsMono Nerd Font 13";
+    hover-select: true;
+    me-select-entry: "";
+    me-accept-entry: "MousePrimary";
+    click-to-exit: true;
+}
+
+* {
+    bg-col:  #eff1f5f2;
+    bg-col-light: #e6e9ef;
+    border-col: #ccd0da;
+    selected-col: #1e66f5;
+    blue: #1e66f5;
+    fg-col: #4c4f69;
+    fg-col2: #eff1f5;
+    grey: #8c8fa1;
+    accent: #1e66f5;
+
+    width: 620;
+    font: "JetBrainsMono Nerd Font 13";
+}
+
+element-text, element-icon , mode-switcher {
+    background-color: inherit;
+    text-color:       inherit;
+}
+
+window {
+    height: 400px;
+    border: 1px;
+    border-color: @border-col;
+    border-radius: 16px;
+    background-color: @bg-col;
+    location: north;
+    anchor: north;
+    y-offset: 160px;
+}
+
+mainbox {
+    background-color: transparent;
+    spacing: 0px;
+    padding: 0px;
+}
+
+inputbar {
+    children: [prompt, entry];
+    background-color: transparent;
+    border-radius: 0px;
+    padding: 14px 18px;
+    border: 0 0 1px 0;
+    border-color: #dce0e8;
+}
+
+prompt {
+    background-color: transparent;
+    padding: 0px 10px 0px 4px;
+    text-color: @blue;
+    font: "JetBrainsMono Nerd Font 16";
+}
+
+entry {
+    background-color: transparent;
+    text-color: @fg-col;
+    placeholder: "Spotlight Araması...";
+    placeholder-color: @grey;
+    cursor: text;
+    font: "JetBrainsMono Nerd Font 14";
+}
+
+listview {
+    border: 0px;
+    padding: 8px 10px;
+    margin: 0px;
+    columns: 1;
+    lines: 6;
+    background-color: transparent;
+    cycle: true;
+    dynamic: true;
+    scrollbar: false;
+}
+
+element {
+    padding: 8px 14px;
+    background-color: transparent;
+    text-color: @fg-col;
+    border-radius: 10px;
+    margin: 2px 4px;
+    spacing: 12px;
+}
+
+element-icon {
+    size: 28px;
+    vertical-align: 0.5;
+}
+
+element-text {
+    vertical-align: 0.5;
+    text-color: inherit;
+    font: "JetBrainsMono Nerd Font Bold 12";
+}
+
+element selected {
+    background-color: @selected-col;
+    text-color: #ffffff;
+}
+
+element selected element-text {
+    text-color: #ffffff;
+}

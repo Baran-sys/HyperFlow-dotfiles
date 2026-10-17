@@ -92,14 +92,13 @@ def get_metrics():
     # Total GPU usage to display
     gpu_disp = nv_gpu
 
-    tooltip = (
-        f"<b>Sistem Kaynakları</b>\n"
-        f"• CPU (İşlemci): %{cpu}{cpu_temp_str}\n"
-        f"• RAM: {ram_used_gb:.1f} GB / {ram_total_gb:.1f} GB (%{ram_pct})\n"
-        f"• GPU (NVIDIA RTX 4060): %{nv_gpu} ({nv_temp}°C, {nv_mem} MB)\n"
-        f"• GPU (Intel UHD): {intel_desc}\n\n"
-        f"<small><i>Sol Tık: Görev Yöneticisini Aç</i></small>"
-    )
+    tooltip_lines = [
+        f"CPU: %{cpu}{cpu_temp_str}",
+        f"RAM: {ram_used_gb:.1f}/{ram_total_gb:.0f} GB (%{ram_pct})"
+    ]
+    if nv_gpu > 0 or nv_temp > 0:
+        tooltip_lines.append(f"GPU: %{nv_gpu} ({nv_temp}°C)")
+    tooltip = chr(10).join(tooltip_lines)
 
     data = {
         "text": f" {cpu}%  󰘚 {ram_pct}%",

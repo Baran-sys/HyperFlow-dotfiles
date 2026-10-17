@@ -47,7 +47,7 @@ AUTOCONF
 
 echo ""
 echo "================================================================="
-echo "  ✓ SDDM Otomatik Giriş Başarıyla Ayarlandı!"
+echo "  [OK] SDDM Otomatik Giriş Başarıyla Ayarlandı!"
 echo "  Kullanıcı : bren"
 echo "  Oturum    : hyprland.desktop"
 echo "================================================================="

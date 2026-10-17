@@ -1,0 +1,196 @@
+* {
+    border: none;
+    border-radius: 0;
+    font-family: JetBrainsMono Nerd Font, monospace;
+    font-weight: bold;
+    font-size: 14px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: transparent;
+    color: #cdd6f4;
+}
+
+#workspaces button {
+    padding: 4px 8px;
+    color: #555869;
+    margin-right: 5px;
+}
+
+#workspaces button.active {
+    color: #cdd6f4;
+}
+
+#workspaces button.focused {
+    color: #11111b;
+    background: #eba0ac;
+    border-radius: 10px;
+}
+
+#workspaces button.urgent {
+    color: #11111b;
+    background: #a6e3a1;
+    border-radius: 10px;
+}
+
+#workspaces button:hover {
+    background: #cdd6f4;
+    color: #11111b; 
+    border-radius: 10px;
+}
+
+#window,
+#clock,
+#custom-media,
+#tray,
+#network,
+#bluetooth,
+#custom-system,
+#battery,
+#backlight,
+#pulseaudio,
+#custom-power,
+#workspaces {
+    background: #1e1e2e;
+    color: #a6adc8;
+    padding: 2px 12px;
+    margin: 3px 0px;
+    margin-top: 5px;
+}
+
+#window {
+    border-radius: 10px;
+    margin-left: 40px;
+    margin-right: 40px;
+    color: #cdd6f4;
+}
+
+#clock {
+    border-radius: 10px;
+    color: #a6adc8;
+    margin-left: 5px;
+}
+
+#workspaces {
+    border-radius: 10px;
+    margin-left: 10px;
+    padding-right: 4px;
+    padding-left: 4px;
+}
+
+#tray {
+    border-radius: 10px;
+    margin-right: 6px;
+}
+
+/* Wi-Fi, Bluetooth ve Pil ayni dikdortgen icinde */
+#network {
+    border-radius: 10px 0px 0px 10px;
+    margin-right: 0px;
+    padding-right: 8px;
+}
+#network:hover {
+    background: #313244;
+}
+
+#bluetooth {
+    border-radius: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+#bluetooth:hover {
+    background: #313244;
+}
+
+#battery {
+    border-radius: 0px 10px 10px 0px;
+    margin-left: 0px;
+    margin-right: 6px;
+    padding-left: 8px;
+    padding-right: 12px;
+}
+#battery:hover {
+    background: #313244;
+}
+
+/* Sistem Izleyici (Tek Birlesik Buton) */
+#custom-system {
+    border-radius: 10px;
+    margin-right: 6px;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+#custom-system:hover {
+    background: #313244;
+}
+#battery.critical:not(.charging) {
+    background-color: #f38ba8;
+    color: #11111b;
+}
+
+/* Parlaklik ve Ses ayni dikdortgen icinde */
+#backlight {
+    border-radius: 10px 0px 0px 10px;
+    margin-right: 0px;
+    padding-right: 8px;
+}
+
+#pulseaudio {
+    border-radius: 0px 10px 10px 0px;
+    margin-left: 0px;
+    padding-left: 8px;
+    margin-right: 6px;
+}
+
+/* Guc ve Oturum Butonu */
+#custom-power {
+    border-radius: 10px;
+    margin-right: 10px;
+    padding-left: 10px;
+    padding-right: 12px;
+    color: #a6adc8;
+    font-size: 13px;
+}
+#custom-power:hover {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+#custom-media {
+    border-radius: 10px;
+    margin-left: 6px;
+    margin-right: 6px;
+    color: #a6adc8;
+}
+#custom-media:hover {
+    background: #313244;
+    color: #cdd6f4;
+}
+#custom-media.playing,
+#custom-media.paused {
+    color: #a6adc8;
+}
+
+/* Tooltip (Koyu Mod - Catppuccin Mocha) */
+tooltip {
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+tooltip * {
+    background-color: transparent;
+    color: #cdd6f4;
+}
+
+tooltip label {
+    color: #cdd6f4;
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 4px;
+}

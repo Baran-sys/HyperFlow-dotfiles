@@ -24,7 +24,7 @@
         "pulseaudio",
         "custom/power"
     ],
-        "custom/media": {
+    "custom/media": {
         "format": "{}",
         "return-type": "json",
         "exec": "/home/bren/.local/bin/waybar-media",
@@ -51,17 +51,13 @@
         "on-click": "/home/bren/.local/bin/calendar-app",
         "interval": 1,
         "rotate": 0,
-        "tooltip-format": "<tt>{calendar}</tt>",
+        "tooltip-format": "<tt><small>{calendar}</small></tt>",
         "calendar": {
             "mode": "month",
-            "mode-mon-col": 3,
+            "mode-mon-col": 1,
             "on-scroll": 1,
-            
             "format": {
-                "months": "<span color=\"#a6adc8\"><b>{}</b></span>",
-                "weekdays": "<span color=\"#a6adc8\"><b>{}</b></span>",
-                "today": "<span color=\"#a6adc8\"><b>{}</b></span>",
-                "days": "<span color=\"#555869\"><b>{}</b></span>"
+                "today": "<b><u>{}</u></b>"
             }
         }
     },
@@ -71,23 +67,26 @@
         "format-linked": "󰈀  {ifname} (No IP)",
         "format-disconnected": "󰖪 ",
         "format-disabled": "󰖪 ",
-        "tooltip-format-disabled": "Wi-Fi Kapalı",
-        "tooltip-format": "Ağ: {essid}\\nSinyal: {signalStrength}% ({signaldBm} dBm)\\nIP: {ipaddr}",
+        "tooltip-format-disabled": "Wi-Fi kapalı",
+        "tooltip-format": "{essid} (%{signalStrength})\nIP: {ipaddr}",
         "tooltip-format-disconnected": "Bağlantı yok",
         "on-click": "/home/bren/.local/bin/wifi-manager",
         "interval": 2,
-        "on-click-right": "/home/bren/.local/bin/toggle-wifi"
+        "on-click-right": "/home/bren/.local/bin/toggle-wifi",
+        "tooltip-format-ethernet": "Ethernet: {ipaddr}"
     },
     "bluetooth": {
         "format": "",
         "format-connected": " {device_alias}",
         "format-disabled": "󰂲",
         "format-off": "󰂲",
-        "tooltip-format": "{controller_alias} {controller_address}",
-        "tooltip-format-connected": "{controller_alias} {controller_address} | {num_connections} bağlı\\n\\n{device_enumerate}",
-        "tooltip-format-enumerate-connected": "{device_alias} {device_address}",
+        "tooltip-format": "Bluetooth açık (Bağlı cihaz yok)",
+        "tooltip-format-connected": "{device_enumerate}",
+        "tooltip-format-enumerate-connected": "• {device_alias}",
         "on-click": "/home/bren/.local/bin/bluetooth-manager",
-        "on-click-right": "rfkill toggle bluetooth"
+        "on-click-right": "rfkill toggle bluetooth",
+        "tooltip-format-disabled": "Bluetooth kapalı",
+        "tooltip-format-off": "Bluetooth kapalı"
     },
     "custom/system": {
         "format": "{}",
@@ -105,6 +104,11 @@
             "󰃟",
             "󰃠"
         ],
+        "tooltip": true,
+        "tooltip-format": "Parlaklık: %{percent}\n(Tıkla: Açık/Koyu Tema Değiştir)",
+        "on-click": "/home/bren/.local/bin/toggle-theme",
+        "on-click-right": "/home/bren/.local/bin/toggle-theme",
+        "on-click-middle": "/home/bren/.local/bin/toggle-theme",
         "on-scroll-up": "/home/bren/.local/bin/change-brightness up",
         "on-scroll-down": "/home/bren/.local/bin/change-brightness down",
         "min-length": 6
@@ -131,11 +135,15 @@
             "󰂁",
             "󰂂",
             "󰁹"
-        ]
+        ],
+        "tooltip-format": "{timeTo} kaldı (%{capacity})",
+        "tooltip-format-charging": "{timeTo} doluma (%{capacity})",
+        "tooltip-format-plugged": "Prizde (%{capacity})",
+        "tooltip-format-full": "Tam dolu (%100)"
     },
     "pulseaudio": {
         "format": "{icon} {volume}%",
-        "tooltip": false,
+        "tooltip": true,
         "format-muted": "  Muted",
         "on-click": "/home/bren/.local/bin/audio-mixer",
         "on-click-right": "pamixer -t",
@@ -155,12 +163,13 @@
                 "",
                 ""
             ]
-        }
-    }
-,
+        },
+        "tooltip-format": "{desc}: %{volume}",
+        "tooltip-format-muted": "{desc}: Sessiz"
+    },
     "custom/power": {
         "format": "",
-        "tooltip": true,
+        "tooltip": false,
         "tooltip-format": "Güç ve Oturum Menüsü",
         "on-click": "/home/bren/.local/bin/power-session"
     }
