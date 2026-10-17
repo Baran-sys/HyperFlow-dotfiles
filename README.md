@@ -7,6 +7,43 @@ Hyprland için modern, sade ve akıcı masaüstü yapılandırması. Waybar, Dun
 
 ---
 
+## Önizleme ve Ekran Görüntüleri
+
+### Temalar ve Masaüstü Görünümü
+
+| Koyu Mod (Catppuccin Mocha) | Açık Mod (Catppuccin Latte) |
+|:---:|:---:|
+| <img src="assets/screenshots/desktop_dark.png" width="100%" alt="Koyu Mod" /> | <img src="assets/screenshots/desktop_light.png" width="100%" alt="Açık Mod" /> |
+| Mor tonlu duvar kağıdı, koyu Waybar ve kenarlıklar | Beyaz tonlu duvar kağıdı, açık Waybar ve kenarlıklar |
+
+### Medya ve Sistem İzleme
+
+| Material 3 Medya Oynatıcı | Görev Yöneticisi ve Kaynak İzleyici |
+|:---:|:---:|
+| <img src="assets/screenshots/media_player.png" width="100%" alt="Medya Oynatıcı" /> | <img src="assets/screenshots/task_manager.png" width="100%" alt="Görev Yöneticisi" /> |
+| MPRIS kontrolleri, albüm kapağı ve ses denetimi | Canlı CPU sıcaklığı, RAM ve GPU süreç denetimi |
+
+### Sistem Popover Appletleri
+
+| Wi-Fi Yöneticisi | Ses Mikseri |
+|:---:|:---:|
+| <img src="assets/screenshots/wifi_manager.png" width="100%" alt="Wi-Fi Yöneticisi" /> | <img src="assets/screenshots/audio_mixer.png" width="100%" alt="Ses Mikseri" /> |
+| Ağ tarama, sinyal durumu ve hızlı bağlantı | Çıkış/giriş aygıtları ve ses seviyeleri |
+
+| Bluetooth Yöneticisi | Takvim ve Saat |
+|:---:|:---:|
+| <img src="assets/screenshots/bluetooth_manager.png" width="100%" alt="Bluetooth Yöneticisi" /> | <img src="assets/screenshots/calendar_app.png" width="100%" alt="Takvim ve Saat" /> |
+| Cihaz eşleştirme ve bağlantı yönetimi | Ay görünümü, hafta numaraları ve dijital saat |
+
+### Başlatıcı ve Güç Yönetimi
+
+| Spotlight Uygulama Başlatıcı | Güç ve Ekran Profili |
+|:---:|:---:|
+| <img src="assets/screenshots/spotlight_menu.png" width="100%" alt="Spotlight Başlatıcı" /> | <img src="assets/screenshots/power_menu.png" width="100%" alt="Güç Menüsü" /> |
+| macOS Spotlight tarzı hızlı uygulama arama | Yenileme hızı (165Hz/60Hz), güç profilleri ve pil sağlığı |
+
+---
+
 ## Öne Çıkan Özellikler
 
 ### Dinamik Açık / Koyu Tema (Catppuccin Mocha & Latte)
@@ -73,6 +110,8 @@ Kurulum betiği eksik paketleri denetler, mevcut yapılandırmalarınızı `~/.c
 
 ```text
 hyprland-dotfiles/
+├── assets/
+│   └── screenshots/        # Önizleme ve tanıtım ekran görüntüleri
 ├── .config/
 │   ├── assets/             # Duvar kağıtları ve arayüz görselleri
 │   ├── dunst/              # Bildirim temaları (açık / koyu)
