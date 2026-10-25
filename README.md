@@ -66,23 +66,16 @@ The installer checks and installs required packages, backs up your existing conf
 
 ## Keybindings
 
-| Shortcut | Action |
-|---|---|
-| `Super + T` | Terminal (`kitty`) |
-| `Super + E` | File Manager (`dolphin`) |
-| `Super + B` | Web Browser (`firefox`) |
-| `Super + C` | Code Editor (`code`) |
-| `Super + O` | Notes (`obsidian`) |
-| `Super + A` | Application Launcher (`spotlight-menu`) |
-| `Super + V` | Clipboard History (`clipboard-menu`) |
-| `Super + Shift + T` | Toggle Dark / Light Theme (`toggle-theme`) |
-| `Super + G` | Toggle Floating Window (`toggle-floating`) |
-| `Super + P` | Color Picker to Clipboard (`hyprpicker`) |
-| `Super + L` | Lock Screen (`hyprlock`) |
-| `Super + Q` | Close Active Window |
-| `Super + F` | Fullscreen |
-| `Ctrl + Escape` | Toggle Waybar |
-| `Print` / `Super + Print` / `Super + Alt + Print` | Screenshot (Screen / Window / Area via `grimblast`) |
+| Shortcut | Action | Shortcut | Action |
+|---|---|---|---|
+| `Super + T` | Terminal (`kitty`) | `Super + Shift + T` | Toggle Dark / Light Theme |
+| `Super + E` | File Manager (`dolphin`) | `Super + G` | Toggle Floating Window |
+| `Super + B` | Web Browser (`firefox`) | `Super + P` | Color Picker (`hyprpicker`) |
+| `Super + C` | Code Editor (`code`) | `Super + L` | Lock Screen (`hyprlock`) |
+| `Super + O` | Notes (`obsidian`) | `Super + Q` | Close Active Window |
+| `Super + A` | App Launcher (`spotlight-menu`) | `Super + F` | Fullscreen |
+| `Super + V` | Clipboard (`clipboard-menu`) | `Ctrl + Escape` | Toggle Waybar |
+| `Print` | Screenshot (Full Screen) | `Super + Alt + Print` | Screenshot (Select Area) |
 
 ---
 
