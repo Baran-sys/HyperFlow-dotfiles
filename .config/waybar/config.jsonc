@@ -105,10 +105,8 @@
             "󰃠"
         ],
         "tooltip": true,
-        "tooltip-format": "Parlaklık: %{percent}\n(Tıkla: Açık/Koyu Tema Değiştir)",
-        "on-click": "/home/bren/.local/bin/toggle-theme",
+        "tooltip-format": "Parlaklık: %{percent}\n(Sağ Tık: Açık/Koyu Tema Değiştir)",
         "on-click-right": "/home/bren/.local/bin/toggle-theme",
-        "on-click-middle": "/home/bren/.local/bin/toggle-theme",
         "on-scroll-up": "/home/bren/.local/bin/change-brightness up",
         "on-scroll-down": "/home/bren/.local/bin/change-brightness down",
         "min-length": 6

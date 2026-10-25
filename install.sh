@@ -53,6 +53,7 @@ REQUIRED_PACKAGES=(
     python
     python-gobject
     gtk3
+    gtk-layer-shell
     python-psutil
     python-cairo
     cairo
@@ -164,8 +165,11 @@ reload_environment() {
     if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
         echo -e "Hyprland oturumu tespit edildi, yapılandırma yeniden yükleniyor..."
         hyprctl reload &>/dev/null || true
-        killall -SIGUSR2 waybar &>/dev/null || true
-        echo -e "${GREEN}✓ Hyprland & Waybar yenilendi.${NC}"
+        killall waybar &>/dev/null || true
+        hyprctl dispatch exec waybar &>/dev/null || true
+        pkill -f "desktop-manager" &>/dev/null || true
+        hyprctl dispatch exec "${HOME}/.local/bin/desktop-manager" &>/dev/null || true
+        echo -e "${GREEN}✓ Hyprland, Waybar ve Masaüstü Yöneticisi (desktop-manager) yenilendi.${NC}"
     else
         echo -e "${YELLOW}Aktif Hyprland oturumu bulunamadı. Yeni bir oturum başlattığınızda ayarlar aktif olacaktır.${NC}"
     fi
