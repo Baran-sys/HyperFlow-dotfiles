@@ -1,9 +1,9 @@
-# Catppuccin Hyprland Dotfiles
+# HyprFlow
 
 > [!NOTE]
 > Originally forked from [gaurav23b/simple-hyprland](https://github.com/gaurav23b/simple-hyprland) and extensively re-engineered with a custom Wayland layer-shell desktop engine, a live light/dark theme switcher, standalone GTK3/Cairo system popover applets, and hybrid GPU power optimizations.
 
-A clean, fast, and cohesive Hyprland desktop environment built around the Catppuccin palette, featuring custom-built Python/GTK3 system applets, Waybar, Rofi, Dunst, and Kitty.
+**HyprFlow** is a clean, fast, and cohesive Hyprland desktop environment built around the Catppuccin palette, featuring a custom layer-shell desktop manager, Python/GTK3 system applets, Waybar, Rofi, Dunst, and Kitty.
 
 ---
 

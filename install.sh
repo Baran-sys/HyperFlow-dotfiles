@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Catppuccin Mocha Hyprland & Custom Applets Installer (Forked from simple-hyprland)
+# HyprFlow — Hyprland Desktop Environment & Custom Applets Installer
 # ==============================================================================
 
 set -e
@@ -15,17 +15,17 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="${HOME}/.config/hyprland-backup-$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="${HOME}/.config/hyprflow-backup-$(date +%Y%m%d_%H%M%S)"
 
 echo -e "${CYAN}${BOLD}"
-echo "  ██████╗  ██████╗ ████████╗███████╗██╗██╗     ███████╗███████╗"
-echo "  ██╔══██╗██╔═══██╗╚══██╔══╝██╔════╝██║██║     ██╔════╝██╔════╝"
-echo "  ██║  ██║██║   ██║   ██║   █████╗  ██║██║     █████╗  ███████╗"
-echo "  ██║  ██║██║   ██║   ██║   ██╔══╝  ██║██║     ██╔══╝  ╚════██║"
-echo "  ██████╔╝╚██████╔╝   ██║   ██║     ██║███████╗███████╗███████║"
-echo "  ╚═════╝  ╚═════╝    ╚═╝   ╚═╝     ╚═╝╚══════╝╚══════╝╚══════╝"
+echo "  ██╗  ██╗██╗   ██╗██████╗ ██████╗ ███████╗██╗      ██████╗ ██╗    ██╗"
+echo "  ██║  ██║╚██╗ ██╔╝██╔══██╗██╔══██╗██╔════╝██║     ██╔═══██╗██║    ██║"
+echo "  ███████║ ╚████╔╝ ██████╔╝██████╔╝█████╗  ██║     ██║   ██║██║ █╗ ██║"
+echo "  ██╔══██║  ╚██╔╝  ██╔═══╝ ██╔══██╗██╔══╝  ██║     ██║   ██║██║███╗██║"
+echo "  ██║  ██║   ██║   ██║     ██║  ██║██║     ███████╗╚██████╔╝╚███╔███╔╝"
+echo "  ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ "
 echo -e "${NC}"
-echo -e "${BOLD}Catppuccin Mocha Hyprland & Custom Applets Installer (Forked from simple-hyprland)${NC}\n"
+echo -e "${BOLD}HyprFlow — Hyprland Desktop Environment & Custom Applets Installer${NC}\n"
 
 # ------------------------------------------------------------------------------
 # 1. Package Installation
