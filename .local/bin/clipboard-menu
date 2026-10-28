@@ -22,8 +22,8 @@ SLURP_PID=$!
 ) &
 MONITOR_PID=$!
 
-# Run cliphist with rofi in spotlight style
-selected=$(cliphist list | rofi -dmenu -p "󰅌 " -theme ~/.config/rofi/clipboard.rasi)
+# Run cliphist with rofi in spotlight style (capped at max 50 items)
+selected=$(cliphist list | head -n 50 | rofi -dmenu -p "󰅌 " -theme ~/.config/rofi/clipboard.rasi)
 rofi_status=$?
 
 # Cleanup
