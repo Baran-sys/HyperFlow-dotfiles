@@ -2,6 +2,8 @@
 import sys
 import os
 import locale
+import calendar
+from datetime import datetime
 
 for loc in ['en_US.utf8', 'en_US.UTF-8', 'en_US', 'C.utf8', 'C']:
     try:
@@ -17,12 +19,10 @@ sys.path.insert(0, os.path.expanduser('~/.local/bin'))
 from waybar_focus import SmartFocus, fast_toggle_or_lock
 fast_toggle_or_lock('calendar-app')
 
-import time
-from datetime import datetime
 import gi
-
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+gi.require_version('PangoCairo', '1.0')
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango, PangoCairo, GObject
 GLib.set_prgname("calendar-app")
 
 CSS_STYLE = b"""
@@ -89,39 +89,42 @@ headerbar button:hover {
     margin-top: 2px;
 }
 
-calendar {
-    background-color: #252538;
-    color: #cdd6f4;
-    border-radius: 12px;
+.calendar-card {
+    background: #252538;
     border: 1px solid #313244;
+    border-radius: 12px;
     margin: 4px 10px 4px 10px;
-    padding: 6px 8px;
-    font-size: 11px;
+    padding: 8px 10px 10px 10px;
 }
 
-calendar:selected {
-    background-color: #cba6f7;
-    color: #11111b;
-    font-weight: 800;
-    border-radius: 8px;
-    border-top: 1px solid transparent;
-    border-bottom: 5px solid transparent;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-}
-
-calendar.header {
-    color: #cba6f7;
-    font-weight: bold;
-}
-
-calendar.highlight {
-    color: #cba6f7;
-    font-weight: bold;
-}
-
-calendar.button {
+.cal-header-btn {
+    background: transparent;
     color: #cdd6f4;
+    border: none;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 6px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.cal-header-btn:hover {
+    background: #313244;
+    color: #cba6f7;
+}
+
+.cal-header-title {
+    color: #cba6f7;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.cal-weekday-label {
+    color: #89b4fa;
+    font-size: 11px;
+    font-weight: 700;
+    min-height: 22px;
 }
 
 .status-bar {
@@ -138,11 +141,266 @@ MONTHS_EN = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ]
+WEEKDAYS_SHORT = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+
+
+class ModernDayCell(Gtk.DrawingArea):
+    def __init__(self, day, is_selected=False, is_today=False, on_click=None):
+        super().__init__()
+        self.day = day
+        self.is_selected = is_selected
+        self.is_today = is_today
+        self.is_hovered = False
+        self.on_click = on_click
+        self.set_size_request(34, 32)
+        self.add_events(
+            Gdk.EventMask.BUTTON_PRESS_MASK |
+            Gdk.EventMask.ENTER_NOTIFY_MASK |
+            Gdk.EventMask.LEAVE_NOTIFY_MASK
+        )
+        self.connect('draw', self.on_draw)
+        self.connect('button-press-event', self._on_button_press)
+        self.connect('enter-notify-event', self._on_enter)
+        self.connect('leave-notify-event', self._on_leave)
+
+    def _on_button_press(self, widget, event):
+        if event.button == 1 and self.on_click and self.day > 0:
+            self.on_click(self.day)
+            return True
+        return False
+
+    def _on_enter(self, widget, event):
+        if not self.is_selected and self.day > 0:
+            self.is_hovered = True
+            self.queue_draw()
+        return False
+
+    def _on_leave(self, widget, event):
+        if self.is_hovered:
+            self.is_hovered = False
+            self.queue_draw()
+        return False
+
+    def on_draw(self, widget, cr):
+        if self.day <= 0:
+            return False
+
+        alloc = self.get_allocation()
+        # Perfect 30x30 square with 8px smooth rounded corners
+        size = 30.0
+        x = (alloc.width - size) / 2.0
+        y = (alloc.height - size) / 2.0
+        r = 8.0
+
+        def draw_rounded_rect(cr, rx, ry, rw, rh, rad):
+            cr.new_sub_path()
+            cr.arc(rx + rw - rad, ry + rad, rad, -1.5707963, 0)
+            cr.arc(rx + rw - rad, ry + rh - rad, rad, 0, 1.5707963)
+            cr.arc(rx + rad, ry + rh - rad, rad, 1.5707963, 3.14159265)
+            cr.arc(rx + rad, ry + rad, rad, 3.14159265, 4.71238898)
+            cr.close_path()
+
+        is_light = False
+        try:
+            from waybar_focus import SmartFocus
+            is_light = SmartFocus.is_light_theme()
+        except Exception:
+            pass
+
+        if is_light:
+            sel_bg = (136 / 255.0, 57 / 255.0, 239 / 255.0)     # Latte Mauve
+            sel_fg = (239 / 255.0, 241 / 255.0, 245 / 255.0)   # Latte Base
+            hov_bg = (204 / 255.0, 208 / 255.0, 218 / 255.0)   # Latte Surface0
+            norm_fg = (76 / 255.0, 79 / 255.0, 105 / 255.0)    # Latte Text
+            today_col = (136 / 255.0, 57 / 255.0, 239 / 255.0)
+        else:
+            sel_bg = (203 / 255.0, 166 / 255.0, 247 / 255.0)   # Mocha Mauve
+            sel_fg = (17 / 255.0, 17 / 255.0, 27 / 255.0)      # Mocha Crust
+            hov_bg = (49 / 255.0, 50 / 255.0, 68 / 255.0)      # Mocha Surface0
+            norm_fg = (205 / 255.0, 214 / 255.0, 244 / 255.0)  # Mocha Text
+            today_col = (203 / 255.0, 166 / 255.0, 247 / 255.0)
+
+        if self.is_selected:
+            cr.set_source_rgb(*sel_bg)
+            draw_rounded_rect(cr, x, y, size, size, r)
+            cr.fill()
+        elif self.is_hovered:
+            cr.set_source_rgb(*hov_bg)
+            draw_rounded_rect(cr, x, y, size, size, r)
+            cr.fill()
+
+        if self.is_today and not self.is_selected:
+            cr.set_source_rgb(*today_col)
+            cr.set_line_width(1.5)
+            draw_rounded_rect(cr, x + 0.75, y + 0.75, size - 1.5, size - 1.5, r - 1)
+            cr.stroke()
+
+        # Text: mathematically dead-centered inside the square
+        layout = widget.create_pango_layout(str(self.day))
+        font_weight = 'Bold' if (self.is_selected or self.is_today) else 'Medium'
+        desc = Pango.FontDescription.from_string(f'JetBrainsMono Nerd Font {font_weight} 10')
+        layout.set_font_description(desc)
+        ink, logical = layout.get_pixel_extents()
+
+        tx = x + (size - ink.width) / 2.0 - ink.x
+        ty = y + (size - ink.height) / 2.0 - ink.y
+
+        if self.is_selected:
+            cr.set_source_rgb(*sel_fg)
+        elif self.is_today:
+            cr.set_source_rgb(*today_col)
+        else:
+            cr.set_source_rgb(*norm_fg)
+
+        cr.move_to(tx, ty)
+        PangoCairo.show_layout(cr, layout)
+        return True
+
+
+class ModernCalendar(Gtk.Box):
+    __gsignals__ = {
+        'day-selected': (GObject.SignalFlags.RUN_FIRST, None, ()),
+        'month-changed': (GObject.SignalFlags.RUN_FIRST, None, ()),
+    }
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.get_style_context().add_class('calendar-card')
+
+        now = datetime.now()
+        self.year = now.year
+        self.month = now.month
+        self.selected_day = now.day
+
+        # Navigation Header
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.btn_prev = Gtk.Button(label='<')
+        self.btn_prev.get_style_context().add_class('cal-header-btn')
+        self.btn_prev.connect('clicked', self._on_prev_month)
+
+        self.lbl_month_year = Gtk.Label()
+        self.lbl_month_year.get_style_context().add_class('cal-header-title')
+        self.lbl_month_year.set_hexpand(True)
+
+        self.btn_next = Gtk.Button(label='>')
+        self.btn_next.get_style_context().add_class('cal-header-btn')
+        self.btn_next.connect('clicked', self._on_next_month)
+
+        header.pack_start(self.btn_prev, False, False, 0)
+        header.pack_start(self.lbl_month_year, True, True, 0)
+        header.pack_start(self.btn_next, False, False, 0)
+        self.pack_start(header, False, False, 0)
+
+        # Days Grid
+        self.grid = Gtk.Grid()
+        self.grid.set_column_spacing(4)
+        self.grid.set_row_spacing(2)
+        self.grid.set_column_homogeneous(True)
+        self.grid.set_row_homogeneous(True)
+        self.grid.set_halign(Gtk.Align.CENTER)
+        self.pack_start(self.grid, True, True, 2)
+
+        self.day_cells = {}
+        self._rebuild_grid()
+
+    def _on_prev_month(self, btn):
+        if self.month == 1:
+            self.month = 12
+            self.year -= 1
+        else:
+            self.month -= 1
+        self._rebuild_grid()
+        self.emit('month-changed')
+
+    def _on_next_month(self, btn):
+        if self.month == 12:
+            self.month = 1
+            self.year += 1
+        else:
+            self.month += 1
+        self._rebuild_grid()
+        self.emit('month-changed')
+
+    def _rebuild_grid(self):
+        # Update header title
+        self.lbl_month_year.set_text(f'{MONTHS_EN[self.month]} {self.year}')
+
+        # Clear existing children
+        for child in self.grid.get_children():
+            self.grid.remove(child)
+        self.day_cells.clear()
+
+        # Attach Weekday Headers
+        for col, wd in enumerate(WEEKDAYS_SHORT):
+            lbl = Gtk.Label(label=wd)
+            lbl.get_style_context().add_class('cal-weekday-label')
+            lbl.set_halign(Gtk.Align.CENTER)
+            lbl.set_valign(Gtk.Align.CENTER)
+            self.grid.attach(lbl, col, 0, 1, 1)
+
+        # Attach Day Cells
+        now = datetime.now()
+        cal_gen = calendar.Calendar(firstweekday=0)
+        month_days = cal_gen.monthdayscalendar(self.year, self.month)
+
+        for row, week in enumerate(month_days, start=1):
+            for col, day in enumerate(week):
+                if day > 0:
+                    is_today = (self.year == now.year and self.month == now.month and day == now.day)
+                    is_selected = (day == self.selected_day)
+                    cell = ModernDayCell(
+                        day,
+                        is_selected=is_selected,
+                        is_today=is_today,
+                        on_click=self._on_cell_clicked
+                    )
+                    self.day_cells[day] = cell
+                    self.grid.attach(cell, col, row, 1, 1)
+
+        self.grid.show_all()
+
+    def _on_cell_clicked(self, day):
+        if self.selected_day != day:
+            old_day = self.selected_day
+            self.selected_day = day
+            if old_day in self.day_cells:
+                self.day_cells[old_day].is_selected = False
+                self.day_cells[old_day].queue_draw()
+            if day in self.day_cells:
+                self.day_cells[day].is_selected = True
+                self.day_cells[day].queue_draw()
+            self.emit('day-selected')
+
+    def get_date(self):
+        # 0-indexed month for Gtk.Calendar compatibility
+        return (self.year, self.month - 1, self.selected_day)
+
+    def select_day(self, day):
+        if self.selected_day != day:
+            old_day = self.selected_day
+            self.selected_day = day
+            if old_day in self.day_cells:
+                self.day_cells[old_day].is_selected = False
+                self.day_cells[old_day].queue_draw()
+            if day in self.day_cells:
+                self.day_cells[day].is_selected = True
+                self.day_cells[day].queue_draw()
+            self.emit('day-selected')
+
+    def select_month(self, month_idx, year):
+        # month_idx is 0-indexed
+        new_month = month_idx + 1
+        if self.month != new_month or self.year != year:
+            self.month = new_month
+            self.year = year
+            self._rebuild_grid()
+            self.emit('month-changed')
+
 
 class CalendarWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Calendar", application=app)
-        self.set_default_size(350, 395)
+        self.set_default_size(350, 440)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
@@ -185,13 +443,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
         main_box.pack_start(card, False, False, 0)
 
         # Calendar
-        self.calendar = Gtk.Calendar()
-        self.calendar.set_display_options(
-            Gtk.CalendarDisplayOptions.SHOW_HEADING |
-            Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES
-        )
-        self.calendar.set_halign(Gtk.Align.CENTER)
-        self.calendar.set_valign(Gtk.Align.CENTER)
+        self.calendar = ModernCalendar()
         self.calendar.connect("day-selected", self.on_day_selected)
         self.calendar.connect("month-changed", self.on_month_changed)
         main_box.pack_start(self.calendar, False, False, 4)
@@ -250,7 +502,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
 
     def update_info_label(self):
         year, month, day = self.calendar.get_date()
-        month += 1 # 0-indexed in Gtk.Calendar
+        month += 1  # 0-indexed in get_date()
         month_name = MONTHS_EN[month]
         if day > 0:
             try:
