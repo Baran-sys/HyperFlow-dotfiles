@@ -144,11 +144,21 @@ def toggle_or_lock():
     if os.path.exists(LOCK_FILE):
         try:
             with open(LOCK_FILE, "r") as f:
-                old_pid = int(f.read().strip())
-            if old_pid != my_pid:
-                os.kill(old_pid, signal.SIGTERM)
-                os.remove(LOCK_FILE)
-                sys.exit(0)
+                content = f.read().strip()
+            if content:
+                old_pid = int(content)
+                if old_pid != my_pid:
+                    try:
+                        os.kill(old_pid, 0)
+                        # Process is running: toggle off
+                        os.kill(old_pid, signal.SIGTERM)
+                        try:
+                            os.remove(LOCK_FILE)
+                        except Exception:
+                            pass
+                        sys.exit(0)
+                    except (ProcessLookupError, OSError):
+                        pass
         except Exception:
             pass
     try:
@@ -160,11 +170,18 @@ def toggle_or_lock():
     def _cleanup_lock():
         try:
             if os.path.exists(LOCK_FILE):
-                os.remove(LOCK_FILE)
+                with open(LOCK_FILE, "r") as f:
+                    if f.read().strip() == str(my_pid):
+                        os.remove(LOCK_FILE)
         except Exception:
             pass
     import atexit
     atexit.register(_cleanup_lock)
+
+    def _sigterm_handler(sig, frame):
+        _cleanup_lock()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
 toggle_or_lock()
 
@@ -239,7 +256,8 @@ class SnippingBar(Gtk.Window):
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
         GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 14)
-        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+        self.connect("destroy", Gtk.main_quit)
 
         # Apply CSS
         provider = Gtk.CssProvider()
@@ -335,14 +353,11 @@ class SnippingBar(Gtk.Window):
         lbl_icon_close.set_markup("<span font='16px'>󰅖</span>")
         self.btn_close.add(lbl_icon_close)
         self.btn_close.set_tooltip_text("Cancel [Esc]")
-        self.btn_close.connect("clicked", lambda b: self.close())
+        self.btn_close.connect("clicked", lambda b: self.destroy())
         self.main_box.pack_start(self.btn_close, False, False, 0)
 
-        # Keyboard & Focus events
+        # Keyboard events
         self.connect("key-press-event", self.on_key_press)
-        self.ready_to_dismiss = False
-        GLib.timeout_add(250, lambda: setattr(self, "ready_to_dismiss", True) or False)
-        self.connect("focus-out-event", self.on_focus_out)
 
     def toggle_delay(self):
         if self.delay == 0:
@@ -357,7 +372,7 @@ class SnippingBar(Gtk.Window):
     def on_key_press(self, widget, event):
         kv = event.keyval
         if kv in (Gdk.KEY_Escape, Gdk.KEY_q, Gdk.KEY_Q):
-            self.close()
+            self.destroy()
             return True
         elif kv in (Gdk.KEY_1, Gdk.KEY_r, Gdk.KEY_R, Gdk.KEY_a, Gdk.KEY_A):
             self.trigger_capture("area")
@@ -370,12 +385,6 @@ class SnippingBar(Gtk.Window):
             return True
         elif kv in (Gdk.KEY_d, Gdk.KEY_D):
             self.toggle_delay()
-            return True
-        return False
-
-    def on_focus_out(self, widget, event):
-        if getattr(self, "ready_to_dismiss", False):
-            self.close()
             return True
         return False
 

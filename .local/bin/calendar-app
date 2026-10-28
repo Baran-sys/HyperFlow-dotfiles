@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 import sys
 import os
+import locale
+
+for loc in ['en_US.utf8', 'en_US.UTF-8', 'en_US', 'C.utf8', 'C']:
+    try:
+        locale.setlocale(locale.LC_ALL, loc)
+        os.environ['LC_ALL'] = loc
+        os.environ['LC_TIME'] = loc
+        os.environ['LANG'] = loc
+        break
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.expanduser('~/.local/bin'))
 from waybar_focus import SmartFocus, fast_toggle_or_lock
 fast_toggle_or_lock('calendar-app')
@@ -91,11 +103,11 @@ calendar:selected {
     background-color: #cba6f7;
     color: #11111b;
     font-weight: bold;
-    border-radius: 6px;
+    border-radius: 4px;
     border-top: 0px solid transparent;
-    border-bottom: 12px solid transparent;
-    border-left: 2px solid transparent;
-    border-right: 2px solid transparent;
+    border-bottom: 11px solid transparent;
+    border-left: 11px solid transparent;
+    border-right: 11px solid transparent;
 }
 
 calendar.header {
@@ -176,9 +188,9 @@ class CalendarWindow(Gtk.ApplicationWindow):
         self.calendar = Gtk.Calendar()
         self.calendar.set_display_options(
             Gtk.CalendarDisplayOptions.SHOW_HEADING |
-            Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES |
-            Gtk.CalendarDisplayOptions.SHOW_WEEK_NUMBERS
+            Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES
         )
+        self.calendar.set_halign(Gtk.Align.CENTER)
         self.calendar.set_valign(Gtk.Align.CENTER)
         self.calendar.connect("day-selected", self.on_day_selected)
         self.calendar.connect("month-changed", self.on_month_changed)
@@ -245,9 +257,8 @@ class CalendarWindow(Gtk.ApplicationWindow):
                 sel_date = datetime(year, month, day)
                 day_name = DAYS_EN[sel_date.weekday()]
                 day_of_year = sel_date.timetuple().tm_yday
-                week_no = sel_date.isocalendar()[1]
-                self.lbl_info.set_text(f"{day_name}, {month_name} {day}, {year}  •  Week {week_no}")
-                self.status_box.set_tooltip_text(f"{day_name}, {month_name} {day}, {year} • Day {day_of_year} of the year • Week {week_no}")
+                self.lbl_info.set_text(f"{day_name}, {month_name} {day}, {year}")
+                self.status_box.set_tooltip_text(f"{day_name}, {month_name} {day}, {year} • Day {day_of_year} of the year")
             except ValueError:
                 self.lbl_info.set_text(f"{month_name} {year}")
                 self.status_box.set_tooltip_text(f"{month_name} {year}")
