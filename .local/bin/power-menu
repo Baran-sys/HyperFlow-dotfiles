@@ -80,6 +80,12 @@ headerbar button:hover {
     margin-top: 2px;
 }
 
+.battery-health {
+    font-size: 11px;
+    color: #89dceb;
+    margin-top: 1px;
+}
+
 list {
     background-color: transparent;
 }
@@ -265,16 +271,6 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         self.header.set_title("Güç & Ekran Profili")
         self.set_titlebar(self.header)
 
-        # Caffeine Button
-        self.btn_caffeine = Gtk.Button()
-        self.btn_caffeine.set_tooltip_text("Caffeine Modu (Ekran Kilidini Durdur)")
-        self.btn_caffeine.connect("clicked", lambda b: self.action_toggle_caffeine())
-        self.lbl_caffeine = Gtk.Label()
-        self.lbl_caffeine.set_markup("<span font_family='JetBrainsMono Nerd Font' font='13'></span>")
-        self.btn_caffeine.add(self.lbl_caffeine)
-        self.header.pack_start(self.btn_caffeine)
-        self.update_caffeine_ui()
-
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         main_box.pack_start(scrolled, True, True, 0)
@@ -301,6 +297,11 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         self.lbl_status.get_style_context().add_class("battery-state")
         self.lbl_status.set_halign(Gtk.Align.START)
         card.pack_start(self.lbl_status, False, False, 0)
+
+        self.lbl_health = Gtk.Label(label="")
+        self.lbl_health.get_style_context().add_class("battery-health")
+        self.lbl_health.set_halign(Gtk.Align.START)
+        card.pack_start(self.lbl_health, False, False, 0)
 
         content_box.pack_start(card, False, False, 0)
 
@@ -342,26 +343,6 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
 
         GLib.idle_add(_init_power)
         GLib.timeout_add_seconds(5, self.on_timer_refresh)
-
-    def is_caffeine_active(self):
-        res = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True)
-        return res.returncode != 0
-
-    def update_caffeine_ui(self):
-        active = self.is_caffeine_active()
-        ctx = self.btn_caffeine.get_style_context()
-        if active:
-            if not ctx.has_class("btn-caffeine-active"):
-                ctx.add_class("btn-caffeine-active")
-            self.btn_caffeine.set_tooltip_text("Caffeine Aktif (Ekran Kilidi Kapalı)")
-        else:
-            if ctx.has_class("btn-caffeine-active"):
-                ctx.remove_class("btn-caffeine-active")
-            self.btn_caffeine.set_tooltip_text("Caffeine Kapalı (Tıkla: Ekran Kilidini Durdur)")
-
-    def action_toggle_caffeine(self):
-        subprocess.run([os.path.expanduser("~/.local/bin/toggle-caffeine")])
-        self.update_caffeine_ui()
 
     def on_focus_out(self, widget, event):
         if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
@@ -560,6 +541,31 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                     status_tr = f"Durum: Pilde Çalışıyor ({time_detail})" if time_detail else "Durum: Pilde Çalışıyor"
                 self.lbl_status.set_text(status_tr)
 
+                # Battery Health Calculation
+                def _read_int(names):
+                    for n in names:
+                        p = os.path.join(bat_dir, n)
+                        if os.path.exists(p):
+                            try:
+                                return int(open(p).read().strip())
+                            except Exception:
+                                pass
+                    return 0
+
+                b_full = _read_int(["energy_full", "charge_full"])
+                b_design = _read_int(["energy_full_design", "charge_full_design"])
+                b_cycles = _read_int(["cycle_count"])
+
+                if b_design > 0 and b_full > 0:
+                    health_pct = min(100, max(0, int(round((b_full / b_design) * 100))))
+                    health_txt = f"Pil Sağlığı: %{health_pct}"
+                    if b_cycles > 0:
+                        health_txt += f"  •  Döngü: {b_cycles}"
+                    self.lbl_health.set_markup(f"<small><span alpha='75%'>{health_txt}</span></small>")
+                    self.lbl_health.show()
+                else:
+                    self.lbl_health.hide()
+
                 self.lbl_time_badge.get_style_context().remove_class("badge-time")
                 self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
                 self.lbl_time_badge.get_style_context().remove_class("badge-full")
@@ -569,6 +575,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             else:
                 self.lbl_pct.set_text("󰚥  AC Güç")
                 self.lbl_status.set_text("Durum: Masaüstü / Doğrudan Güç Kaynağı")
+                self.lbl_health.hide()
                 self.lbl_time_badge.get_style_context().remove_class("badge-time")
                 self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
                 self.lbl_time_badge.get_style_context().add_class("badge-full")

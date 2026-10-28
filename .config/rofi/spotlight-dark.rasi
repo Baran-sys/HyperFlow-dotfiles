@@ -1,5 +1,5 @@
 configuration {
-    modi: "drun,run,filebrowser";
+    modes: "drun,run,filebrowser";
     show-icons: true;
     icon-theme: "Tela-circle-dracula";
     display-drun: " ";

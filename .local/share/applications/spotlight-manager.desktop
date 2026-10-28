@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Uygulama Gizleme ve Gösterme Yöneticisi
+Comment=Spotlight'ta görünen uygulamaları gizleyin veya tekrar açın
+Exec=spotlight-menu --manage
+Icon=view-hidden
+Categories=Settings;System;Utility;
+Keywords=gizle;sakla;gorunur;hide;unhide;spotlight;rofi;
+Terminal=false

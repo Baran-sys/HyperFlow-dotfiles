@@ -1174,20 +1174,15 @@ class DesktopManager(Gtk.Window):
             return True
 
         if self.primary_drag_item and self.dragging_items:
-            if self.external_dnd_active:
-                return True
-            if not self.is_dragging_icon and math.hypot(event.x - self.drag_start_x, event.y - self.drag_start_y) > 4:
+            if not self.is_dragging_icon and math.hypot(event.x - self.drag_start_x, event.y - self.drag_start_y) > 6:
                 self.is_dragging_icon = True
                 for it in self.dragging_items:
                     it.target_scale = 1.07
                 self.ensure_animation_loop()
+                self.start_external_drag(event)
+                return True
 
-            if self.is_dragging_icon:
-                sw, sh = self.get_screen_size()
-                if event.x <= 18 or event.y <= 18 or event.x >= sw - 18 or event.y >= sh - 18:
-                    self.start_external_drag(event)
-                    return True
-
+            if self.is_dragging_icon and not self.external_dnd_active:
                 self.drag_curr_x = event.x
                 self.drag_curr_y = event.y
                 for it in self.dragging_items:
@@ -1310,6 +1305,16 @@ class DesktopManager(Gtk.Window):
                         row += 1
                     except Exception as e:
                         self.notify("Kopyalama Hatası", str(e))
+                elif src.exists() and src.parent == DESKTOP_DIR:
+                    over = self.item_at(x, y)
+                    if over and over.path.is_dir() and over.path.resolve() != src.resolve():
+                        try:
+                            shutil.move(str(src), str(over.path / src.name))
+                            self.positions.pop(src.name, None)
+                        except Exception as e:
+                            self.notify("Taşıma Hatası", str(e))
+                    else:
+                        self.positions[src.name] = [col, row]
         self.save_positions()
         drag_context.finish(True, False, time)
         self.reload_items()

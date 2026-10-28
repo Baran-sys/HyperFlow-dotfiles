@@ -1,5 +1,5 @@
 configuration {
-    modi: "drun,run,filebrowser";
+    modes: "drun,run,filebrowser";
     show-icons: true;
     icon-theme: "Tela-circle-dracula";
     display-drun: " ";
@@ -11,8 +11,6 @@ configuration {
     me-select-entry: "";
     me-accept-entry: "MousePrimary";
     click-to-exit: true;
-    kb-custom-1: "Alt+h";
-    kb-custom-2: "Alt+g,Alt+s";
 }
 
 * {
@@ -71,7 +69,7 @@ prompt {
 entry {
     background-color: transparent;
     text-color: @fg-col;
-    placeholder: "Spotlight... (Alt+H: Gizle | Alt+G: Gizliler)";
+    placeholder: "Spotlight Araması...";
     placeholder-color: @grey;
     cursor: text;
     font: "JetBrainsMono Nerd Font 14";
