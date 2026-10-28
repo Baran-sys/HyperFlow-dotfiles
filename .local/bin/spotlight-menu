@@ -64,9 +64,9 @@ hide_or_toggle_desktop_file() {
     local app_name
     app_name=$(grep -m1 "^Name=" "$target" | cut -d= -f2-)
     if [ "$new_state" = "true" ]; then
-        notify-send -a "Spotlight" -t 2000 "Uygulama Gizlendi" "'${app_name:-$base}' artık Spotlight'ta görünmeyecek."
+        notify-send -a "Spotlight" -t 2000 "Application Hidden" "'${app_name:-$base}' will no longer appear in Spotlight."
     else
-        notify-send -a "Spotlight" -t 2000 "Uygulama Gösterildi" "'${app_name:-$base}' tekrar Spotlight listesine eklendi."
+        notify-send -a "Spotlight" -t 2000 "Application Restored" "'${app_name:-$base}' is now visible in Spotlight."
     fi
     update-desktop-database "$LOCAL_APPS" 2>/dev/null || true
 }
@@ -129,7 +129,7 @@ items = sorted(apps.items(), key=lambda x: (not x[1][1], x[1][0].lower()))
 menu_lines = []
 lookup = {}
 for fname, (name, is_hid, fpath) in items:
-    status = "󰈉  [Gizli]" if is_hid else "󰈈  [Görünür]"
+    status = "󰈉  [Hidden]" if is_hid else "󰈈  [Visible]"
     label = f"{status}  {name}  ({fname})"
     menu_lines.append(label)
     lookup[label] = fpath
@@ -138,7 +138,7 @@ if not menu_lines:
     raise SystemExit(0)
 
 proc = subprocess.run(
-    ["rofi", "-dmenu", "-i", "-p", "󰈈 ", "-mesg", "Gizlemek veya tekrar göstermek istediğiniz uygulamayı seçin (Enter):", "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")],
+    ["rofi", "-dmenu", "-i", "-p", "󰈈 ", "-mesg", "Select an application to toggle visibility (Enter):", "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")],
     input="\n".join(menu_lines),
     text=True,
     capture_output=True

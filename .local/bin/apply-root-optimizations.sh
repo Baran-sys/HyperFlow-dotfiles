@@ -2,17 +2,17 @@
 set -e
 
 echo "================================================================="
-echo "  Sistem Güç Optimizasyonu & Hibrit GPU / Xorg Düzeltmesi"
+echo "  System Power Optimization & Hybrid GPU / Xorg Fix"
 echo "================================================================="
 echo ""
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Sistem yapılandırma dosyalarını düzenlemek için root yetkisi gerekiyor."
-    echo "Lütfen sudo şifrenizi girin:"
+    echo "Root privileges are required to modify system configuration files."
+    echo "Please enter your sudo password:"
     exec sudo bash "$0" "$@"
 fi
 
-echo "[1/3] Xorg'un harici GPU'yu kilitlemesini engelleyecek iGPU yapılandırması kontrol ediliyor..."
+echo "[1/3] Checking iGPU configuration to prevent Xorg from locking discrete GPU..."
 IGPU_LINE=$(lspci | grep -E "VGA|3D|Display" | grep -i -E "Intel|AMD|ATI" | head -n 1 || true)
 if [ -n "$IGPU_LINE" ]; then
     RAW_SLOT=$(echo "$IGPU_LINE" | awk '{print $1}')
@@ -24,7 +24,7 @@ if [ -n "$IGPU_LINE" ]; then
     FUNC_DEC=$((16#$FUNC_HEX))
     mkdir -p /etc/X11/xorg.conf.d
     cat << XCONF > /etc/X11/xorg.conf.d/10-igpu-primary.conf
-# SDDM ve Xorg'un harici (dGPU) kartı uykudan uyandırmasını önler
+# Prevents SDDM and Xorg from waking up discrete (dGPU) card
 Section "ServerFlags"
     Option "AutoAddGPU" "false"
 EndSection
@@ -35,28 +35,28 @@ Section "Device"
     BusID "PCI:${BUS_DEC}:${DEV_DEC}:${FUNC_DEC}"
 EndSection
 XCONF
-    echo "  [OK] /etc/X11/xorg.conf.d/10-igpu-primary.conf oluşturuldu (BusID: PCI:${BUS_DEC}:${DEV_DEC}:${FUNC_DEC})."
+    echo "  [OK] /etc/X11/xorg.conf.d/10-igpu-primary.conf created (BusID: PCI:${BUS_DEC}:${DEV_DEC}:${FUNC_DEC})."
 else
-    echo "  [Bilgi] Dahili iGPU bulunamadı, Xorg PCI sabitlemesi atlandı."
+    echo "  [Info] Internal iGPU not found, skipping Xorg PCI pinning."
 fi
 
-echo "[2/3] Pildeyken güç tasarrufu için udev kuralları ekleniyor..."
+echo "[2/3] Adding udev power-saving rules for battery operation..."
 mkdir -p /etc/udev/rules.d
 cat << 'UDEVCONF' > /etc/udev/rules.d/99-battery-powersave.rules
-# Pildeyken power-saver, prize takılıyken balanced profiline otomatik geçiş
+# Automatic power profile switching on battery / AC
 # SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/powerprofilesctl set power-saver"
 # SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/powerprofilesctl set balanced"
 UDEVCONF
 udevadm control --reload && udevadm trigger || true
-echo "  [OK] Udev kuralları yüklendi ve tetiklendi."
+echo "  [OK] Udev rules reloaded and triggered."
 
-echo "[3/3] Paket önbelleği temizleniyor..."
+echo "[3/3] Cleaning package cache..."
 if command -v pacman &>/dev/null; then
     pacman -Sc --noconfirm || true
 fi
 
 echo ""
 echo "================================================================="
-echo "  [OK] Tüm Sistem Optimizasyonları Başarıyla Tamamlandı!"
+echo "  [OK] All System Optimizations Completed Successfully!"
 echo "================================================================="
 echo ""

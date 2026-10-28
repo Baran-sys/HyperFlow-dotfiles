@@ -179,20 +179,20 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Wi-Fi Yöneticisi")
-        self.header.set_subtitle("Ağlar taranıyor...")
+        self.header.set_title("Wi-Fi Manager")
+        self.header.set_subtitle("Scanning networks...")
         self.set_titlebar(self.header)
 
         # Wi-Fi Power Switch
         self.switch_wifi = Gtk.Switch()
         self.switch_wifi.set_valign(Gtk.Align.CENTER)
-        self.switch_wifi.set_tooltip_text("Wi-Fi Aç / Kapat")
+        self.switch_wifi.set_tooltip_text("Toggle Wi-Fi")
         self.switch_wifi.connect("notify::active", self.on_wifi_switch_toggled)
         self.header.pack_start(self.switch_wifi)
 
         # Refresh / Rescan Button
         self.btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-        self.btn_refresh.set_tooltip_text("Ağları Yenile (Yeniden Tara)")
+        self.btn_refresh.set_tooltip_text("Refresh Networks (Rescan)")
         self.btn_refresh.connect("clicked", lambda b: self.start_scan(rescan=True))
         self.header.pack_start(self.btn_refresh)
 
@@ -202,7 +202,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         # Advanced Settings Button (nm-connection-editor)
         self.btn_settings = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
-        self.btn_settings.set_tooltip_text("Gelişmiş Ağ Ayarları (nm-connection-editor)")
+        self.btn_settings.set_tooltip_text("Advanced Network Settings (nm-connection-editor)")
         self.btn_settings.connect("clicked", lambda b: subprocess.Popen(["nm-connection-editor"]))
         self.header.pack_end(self.btn_settings)
 
@@ -219,7 +219,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.set_can_focus(True)
         self.search_entry.get_style_context().add_class("search-box")
-        self.search_entry.set_placeholder_text("Ağlarda ara...")
+        self.search_entry.set_placeholder_text("Search networks...")
         self.search_entry.connect("search-changed", self.on_search_changed)
         main_box.pack_start(self.search_entry, False, False, 0)
 
@@ -236,7 +236,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         # Bottom Status Bar
         self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.status_box.get_style_context().add_class("status-bar")
-        self.lbl_status_left = Gtk.Label(label="Durum yükleniyor...")
+        self.lbl_status_left = Gtk.Label(label="Loading status...")
         self.lbl_status_right = Gtk.Label(label="")
         self.status_box.pack_start(self.lbl_status_left, False, False, 0)
         self.status_box.pack_end(self.lbl_status_right, False, False, 0)
@@ -292,14 +292,14 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         cmd = "on" if state else "off"
         def toggle_thread():
             subprocess.run(["nmcli", "radio", "wifi", cmd])
-            GLib.idle_add(lambda: self.start_scan(rescan=True) if state else self.clear_list("Wi-Fi Kapalı"))
+            GLib.idle_add(lambda: self.start_scan(rescan=True) if state else self.clear_list("Wi-Fi Off"))
         threading.Thread(target=toggle_thread, daemon=True).start()
 
     def clear_list(self, msg=""):
         for child in self.listbox.get_children():
             self.listbox.remove(child)
         self.header.set_subtitle(msg)
-        self.lbl_status_left.set_text("Wi-Fi devre dışı")
+        self.lbl_status_left.set_text("Wi-Fi disabled")
         self.lbl_status_right.set_text("")
 
     def start_scan(self, rescan=True):
@@ -308,7 +308,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         self.is_scanning = True
         self.spinner.start()
         self.btn_refresh.set_sensitive(False)
-        self.header.set_subtitle("Ağlar taranıyor...")
+        self.header.set_subtitle("Scanning networks...")
 
         threading.Thread(target=self._scan_worker, args=(rescan,), daemon=True).start()
 
@@ -324,7 +324,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
                 self.switch_wifi.handler_unblock_by_func(self.on_wifi_switch_toggled)
             GLib.idle_add(_sync)
             if not is_enabled:
-                GLib.idle_add(self.clear_list, "Wi-Fi Kapalı")
+                GLib.idle_add(self.clear_list, "Wi-Fi Off")
                 return
         except Exception:
             pass
@@ -454,14 +454,14 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         # Update subtitle & status
         if current_conn:
-            self.header.set_subtitle(f"Bağlı: {current_conn}")
+            self.header.set_subtitle(f"Connected: {current_conn}")
             ip_text = f" | IP: {ip_addr}" if ip_addr else ""
-            self.lbl_status_left.set_text(f"Bağlı: {current_conn}{ip_text}")
+            self.lbl_status_left.set_text(f"Connected: {current_conn}{ip_text}")
         else:
-            self.header.set_subtitle("Bağlantı Yok")
-            self.lbl_status_left.set_text("Bağlantı yok")
+            self.header.set_subtitle("No Connection")
+            self.lbl_status_left.set_text("No connection")
 
-        self.lbl_status_right.set_text(f"{len(networks)} ağ bulundu")
+        self.lbl_status_right.set_text(f"{len(networks)} networks found")
 
         # Repopulate list
         for child in self.listbox.get_children():
@@ -515,20 +515,20 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         if net["security"]:
             img_lock = Gtk.Image.new_from_icon_name("network-wireless-encrypted-symbolic", Gtk.IconSize.MENU)
-            img_lock.set_tooltip_text(f"Güvenli Ağ: {net['security']}")
+            img_lock.set_tooltip_text(f"Secured Network: {net['security']}")
             title_box.pack_start(img_lock, False, False, 0)
 
         if net["ssid"] in self.saved_connections and not net["in_use"]:
-            lbl_saved = Gtk.Label(label="Kayıtlı")
+            lbl_saved = Gtk.Label(label="Saved")
             lbl_saved.get_style_context().add_class("badge-saved")
             title_box.pack_start(lbl_saved, False, False, 0)
 
         # Subtitle Row (Signal % • Band • Security)
         bands_str = "/".join(sorted(net["bands"]))
         if self.is_enterprise_network(net):
-            sec_str = f"{net['security']} (Kurumsal 802.1X)" if net["security"] else "Kurumsal 802.1X"
+            sec_str = f"{net['security']} (Enterprise 802.1X)" if net["security"] else "Enterprise 802.1X"
         else:
-            sec_str = net["security"] if net["security"] else "Açık Ağ"
+            sec_str = net["security"] if net["security"] else "Open Network"
         detail_text = f"%{net['signal']}  •  {bands_str}  •  {sec_str}"
         lbl_details = Gtk.Label()
         lbl_details.set_markup(f"<small><span alpha='65%'>{GLib.markup_escape_text(detail_text)}</span></small>")
@@ -537,18 +537,18 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         # Right Action Widgets
         if net["in_use"]:
-            lbl_connected = Gtk.Label(label="Bağlı")
+            lbl_connected = Gtk.Label(label="Connected")
             lbl_connected.get_style_context().add_class("badge-connected")
             lbl_connected.set_valign(Gtk.Align.CENTER)
             hbox.pack_end(lbl_connected, False, False, 4)
 
-            btn_disconnect = Gtk.Button(label="Bağlantıyı Kes")
+            btn_disconnect = Gtk.Button(label="Disconnect")
             btn_disconnect.get_style_context().add_class("btn-disconnect")
             btn_disconnect.set_valign(Gtk.Align.CENTER)
             btn_disconnect.connect("clicked", lambda b: self.disconnect_network())
             hbox.pack_end(btn_disconnect, False, False, 4)
         else:
-            btn_connect = Gtk.Button(label="Bağlan")
+            btn_connect = Gtk.Button(label="Connect")
             btn_connect.get_style_context().add_class("btn-connect")
             btn_connect.set_valign(Gtk.Align.CENTER)
             btn_connect.connect("clicked", lambda b, n=net: self.connect_network(n))
@@ -566,31 +566,31 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             menu = Gtk.Menu()
 
             if net["in_use"]:
-                item_disc = Gtk.MenuItem(label="Bağlantıyı Kes")
+                item_disc = Gtk.MenuItem(label="Disconnect")
                 item_disc.connect("activate", lambda i: self.disconnect_network())
                 menu.append(item_disc)
             else:
-                item_conn = Gtk.MenuItem(label="Bağlan")
+                item_conn = Gtk.MenuItem(label="Connect")
                 item_conn.connect("activate", lambda i: self.connect_network(net))
                 menu.append(item_conn)
 
             if net.get("security"):
-                item_repass = Gtk.MenuItem(label="Parola Gir / Değiştir...")
+                item_repass = Gtk.MenuItem(label="Enter / Change Password...")
                 item_repass.connect("activate", lambda i: self.show_password_dialog(net["ssid"], net=net))
                 menu.append(item_repass)
 
-            item_ent = Gtk.MenuItem(label="Kurumsal Ağ (802.1X / EAP) Yapılandır...")
+            item_ent = Gtk.MenuItem(label="Configure Enterprise (802.1X / EAP)...")
             item_ent.connect("activate", lambda i: self.show_enterprise_dialog(net))
             menu.append(item_ent)
 
             if net["ssid"] in self.saved_connections:
-                item_forget = Gtk.MenuItem(label="Bu Ağı Unut")
+                item_forget = Gtk.MenuItem(label="Forget This Network")
                 item_forget.connect("activate", lambda i: self.forget_network(net["ssid"]))
                 menu.append(item_forget)
 
             menu.append(Gtk.SeparatorMenuItem())
 
-            item_settings = Gtk.MenuItem(label="Gelişmiş Ağ Ayarları...")
+            item_settings = Gtk.MenuItem(label="Advanced Network Settings...")
             item_settings.connect("activate", lambda i: subprocess.Popen(["nm-connection-editor"]))
             menu.append(item_settings)
 
@@ -634,7 +634,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         ssid = net["ssid"]
 
         dialog = Gtk.Dialog(
-            title=f"Kurumsal Ağa Bağlan ({ssid})",
+            title=f"Connect to Enterprise Network ({ssid})",
             parent=self,
             flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT
         )
@@ -649,8 +649,8 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         lbl_head = Gtk.Label()
         lbl_head.set_markup(
-            f"<b>{GLib.markup_escape_text(ssid)}</b> (WPA-EAP / 802.1X Kurumsal Ağ)\n"
-            "<small><span alpha='75%'>Ağınızın kimlik doğrulama yöntemi ve kullanıcı bilgilerinizi girin:</span></small>"
+            f"<b>{GLib.markup_escape_text(ssid)}</b> (WPA-EAP / 802.1X Enterprise)\n"
+            "<small><span alpha='75%'>Enter your network authentication method and user credentials:</span></small>"
         )
         lbl_head.set_halign(Gtk.Align.START)
         lbl_head.set_line_wrap(True)
@@ -662,7 +662,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         vbox.pack_start(grid, False, False, 4)
 
         # EAP Method
-        lbl_eap = Gtk.Label(label="EAP Yöntemi:")
+        lbl_eap = Gtk.Label(label="EAP Method:")
         lbl_eap.set_halign(Gtk.Align.START)
         combo_eap = Gtk.ComboBoxText()
         combo_eap.append("peap", "PEAP (Protected EAP)")
@@ -676,7 +676,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         grid.attach(combo_eap, 1, 0, 1, 1)
 
         # Phase 2 Auth
-        lbl_p2 = Gtk.Label(label="Faz 2 Doğrulama:")
+        lbl_p2 = Gtk.Label(label="Phase 2 Auth:")
         lbl_p2.set_halign(Gtk.Align.START)
         combo_p2 = Gtk.ComboBoxText()
         combo_p2.append("mschapv2", "MSCHAPv2")
@@ -684,26 +684,26 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         combo_p2.append("gtc", "GTC")
         combo_p2.append("mschap", "MSCHAP")
         combo_p2.append("chap", "CHAP")
-        combo_p2.append("none", "Yok / Otomatik")
+        combo_p2.append("none", "None / Automatic")
         combo_p2.set_active_id("mschapv2")
         grid.attach(lbl_p2, 0, 1, 1, 1)
         grid.attach(combo_p2, 1, 1, 1, 1)
 
         # CA Certificate Mode
-        lbl_ca = Gtk.Label(label="CA Sertifikası:")
+        lbl_ca = Gtk.Label(label="CA Certificate:")
         lbl_ca.set_halign(Gtk.Align.START)
         combo_ca = Gtk.ComboBoxText()
-        combo_ca.append("none", "Sertifika Gerekmiyor (Doğrulama Yok)")
-        combo_ca.append("system", "Sistem CA Sertifikalarını Kullan")
-        combo_ca.append("file", "Özel Sertifika Dosyası Seç (.crt/.pem)")
+        combo_ca.append("none", "No Certificate Required (No validation)")
+        combo_ca.append("system", "Use System CA Certificates")
+        combo_ca.append("file", "Select Custom Certificate File (.crt/.pem)")
         combo_ca.set_active_id("none")
         grid.attach(lbl_ca, 0, 2, 1, 1)
         grid.attach(combo_ca, 1, 2, 1, 1)
 
         # Optional CA Cert File Chooser
-        lbl_ca_file = Gtk.Label(label="Sertifika Dosyası:")
+        lbl_ca_file = Gtk.Label(label="Certificate File:")
         lbl_ca_file.set_halign(Gtk.Align.START)
-        file_ca = Gtk.FileChooserButton(title="CA Sertifikası Seçin", action=Gtk.FileChooserAction.OPEN)
+        file_ca = Gtk.FileChooserButton(title="Select CA Certificate", action=Gtk.FileChooserAction.OPEN)
         grid.attach(lbl_ca_file, 0, 3, 1, 1)
         grid.attach(file_ca, 1, 3, 1, 1)
 
@@ -715,49 +715,49 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         combo_ca.connect("changed", on_ca_mode_changed)
 
         # Identity
-        lbl_user = Gtk.Label(label="Kullanıcı Adı / Kimlik:")
+        lbl_user = Gtk.Label(label="Username / Identity:")
         lbl_user.set_halign(Gtk.Align.START)
         entry_user = Gtk.Entry()
         entry_user.set_hexpand(True)
-        entry_user.set_placeholder_text("Örn: kullanici@kurum.edu.tr veya kullanici_adi")
+        entry_user.set_placeholder_text("e.g. user@institution.edu or username")
         grid.attach(lbl_user, 0, 4, 1, 1)
         grid.attach(entry_user, 1, 4, 1, 1)
 
         # Anonymous Identity
-        lbl_anon = Gtk.Label(label="Anonim Kimlik:")
+        lbl_anon = Gtk.Label(label="Anonymous Identity:")
         lbl_anon.set_halign(Gtk.Align.START)
         entry_anon = Gtk.Entry()
         entry_anon.set_hexpand(True)
-        entry_anon.set_placeholder_text("İsteğe bağlı (boş bırakılabilir)")
+        entry_anon.set_placeholder_text("Optional (can be left blank)")
         grid.attach(lbl_anon, 0, 5, 1, 1)
         grid.attach(entry_anon, 1, 5, 1, 1)
 
         # Domain Suffix Match (Optional)
-        lbl_dom = Gtk.Label(label="Sunucu Etki Alanı:")
+        lbl_dom = Gtk.Label(label="Server Domain:")
         lbl_dom.set_halign(Gtk.Align.START)
         entry_dom = Gtk.Entry()
         entry_dom.set_hexpand(True)
-        entry_dom.set_placeholder_text("İsteğe bağlı (örn: kurum.edu.tr)")
+        entry_dom.set_placeholder_text("Optional (e.g. institution.edu)")
         grid.attach(lbl_dom, 0, 6, 1, 1)
         grid.attach(entry_dom, 1, 6, 1, 1)
 
         # Password
-        lbl_pass = Gtk.Label(label="Parola:")
+        lbl_pass = Gtk.Label(label="Password:")
         lbl_pass.set_halign(Gtk.Align.START)
         entry_pass = Gtk.Entry()
         entry_pass.set_hexpand(True)
         entry_pass.set_visibility(False)
         entry_pass.set_activates_default(True)
-        entry_pass.set_placeholder_text("Ağ erişim parolanız")
+        entry_pass.set_placeholder_text("Network password")
         grid.attach(lbl_pass, 0, 7, 1, 1)
         grid.attach(entry_pass, 1, 7, 1, 1)
 
-        chk_show = Gtk.CheckButton(label="Parolayı Göster")
+        chk_show = Gtk.CheckButton(label="Show Password")
         chk_show.connect("toggled", lambda c: entry_pass.set_visibility(c.get_active()))
         vbox.pack_start(chk_show, False, False, 0)
 
-        dialog.add_button("İptal", Gtk.ResponseType.CANCEL)
-        btn_ok = dialog.add_button("Bağlan", Gtk.ResponseType.OK)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        btn_ok = dialog.add_button("Connect", Gtk.ResponseType.OK)
         btn_ok.get_style_context().add_class("btn-connect")
         dialog.set_default_response(Gtk.ResponseType.OK)
 
@@ -788,7 +788,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         self, ssid, identity, password, eap_method, phase2_auth,
         anon_id, ca_mode, ca_cert_path=None, domain_match="", net=None
     ):
-        self.show_info(f"'{ssid}' kurumsal ağına bağlanılıyor...", Gtk.MessageType.INFO)
+        self.show_info(f"Connecting to enterprise network '{ssid}'...", Gtk.MessageType.INFO)
         self.spinner.start()
 
         def ent_thread():
@@ -829,7 +829,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
                 capture_output=True, text=True
             )
             if res_up.returncode != 0:
-                # Clean up failed profile so it doesn't stay stuck as "Kayıtlı"
+                # Clean up failed profile so it doesn't stay stuck as "Saved"
                 subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
             GLib.idle_add(self._on_connect_finished, ssid, res_up.returncode, res_up.stdout, res_up.stderr, net, False)
 
@@ -837,7 +837,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
     def show_password_dialog(self, ssid, net=None):
         dialog = Gtk.Dialog(
-            title="Ağa Bağlan",
+            title="Connect to Network",
             parent=self,
             flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT
         )
@@ -851,7 +851,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         content.add(vbox)
 
         lbl = Gtk.Label()
-        lbl.set_markup(f"<b>{GLib.markup_escape_text(ssid)}</b> için Wi-Fi parolasını girin:")
+        lbl.set_markup(f"Enter Wi-Fi password for <b>{GLib.markup_escape_text(ssid)}</b>:")
         lbl.set_halign(Gtk.Align.START)
         vbox.pack_start(lbl, False, False, 0)
 
@@ -860,14 +860,14 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         entry.set_activates_default(True)
         vbox.pack_start(entry, False, False, 0)
 
-        chk_show = Gtk.CheckButton(label="Parolayı Göster")
+        chk_show = Gtk.CheckButton(label="Show Password")
         chk_show.connect("toggled", lambda c: entry.set_visibility(c.get_active()))
         vbox.pack_start(chk_show, False, False, 0)
 
         # Button ID 42 switches directly to the 802.1X Enterprise dialog
-        dialog.add_button("802.1X / Kurumsal", 42)
-        dialog.add_button("İptal", Gtk.ResponseType.CANCEL)
-        btn_ok = dialog.add_button("Bağlan", Gtk.ResponseType.OK)
+        dialog.add_button("802.1X / Enterprise", 42)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        btn_ok = dialog.add_button("Connect", Gtk.ResponseType.OK)
         btn_ok.get_style_context().add_class("btn-connect")
         dialog.set_default_response(Gtk.ResponseType.OK)
 
@@ -901,7 +901,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             pass
 
     def _do_connect(self, ssid, password, net=None):
-        self.show_info(f"'{ssid}' ağına bağlanılıyor...", Gtk.MessageType.INFO)
+        self.show_info(f"Connecting to '{ssid}'...", Gtk.MessageType.INFO)
         self.spinner.start()
 
         def connect_thread():
@@ -983,13 +983,13 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
     def _on_connect_finished(self, ssid, returncode, stdout, stderr, net=None, used_saved_without_pass=False):
         self.spinner.stop()
         if returncode == 0:
-            self.show_info(f"'{ssid}' ağına başarıyla bağlandı!", Gtk.MessageType.INFO)
+            self.show_info(f"Successfully connected to '{ssid}'!", Gtk.MessageType.INFO)
             self.start_scan(rescan=False)
         else:
-            err_msg = stderr.strip() or stdout.strip() or "Bağlantı hatası oluştu."
+            err_msg = stderr.strip() or stdout.strip() or "Connection error occurred."
             # If a previously saved profile failed due to missing/changed password, prompt the user immediately!
             if used_saved_without_pass and net and net.get("security"):
-                self.show_info(f"'{ssid}' için parola doğrulaması gerekiyor.", Gtk.MessageType.WARNING)
+                self.show_info(f"Authentication required for '{ssid}'.", Gtk.MessageType.WARNING)
                 if self.is_enterprise_network(net):
                     self.show_enterprise_dialog(net)
                 else:
@@ -997,12 +997,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
                 return
 
             if "Secrets were required" in err_msg or "authentication" in err_msg.lower() or "no-secrets" in err_msg.lower():
-                err_msg = "Parola hatalı veya kimlik doğrulama başarısız oldu."
-            self.show_info(f"Bağlantı Hatası: {err_msg}", Gtk.MessageType.ERROR)
+                err_msg = "Incorrect password or authentication failed."
+            self.show_info(f"Connection Error: {err_msg}", Gtk.MessageType.ERROR)
             self.start_scan(rescan=False)
 
     def disconnect_network(self):
-        self.show_info("Bağlantı kesiliyor...", Gtk.MessageType.INFO)
+        self.show_info("Disconnecting...", Gtk.MessageType.INFO)
         def disc_thread():
             subprocess.run(["nmcli", "device", "disconnect", self.get_wifi_ifname()], capture_output=True)
             GLib.idle_add(lambda: self.start_scan(rescan=False))

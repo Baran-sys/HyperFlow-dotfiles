@@ -6,12 +6,12 @@ if pgrep -x hypridle >/dev/null; then
     # hypridle is running -> activate caffeine
     pkill -x hypridle
     touch "$STATE_FILE"
-    notify-send -a "Caffeine" "Caffeine Aktif" "Ekran kilitlenmesi ve uyku modu durduruldu." -t 2500
+    notify-send -a "Caffeine" "Caffeine Active" "Screen lock and sleep have been inhibited." -t 2500
     echo "active"
 else
     # hypridle is not running -> deactivate caffeine
     rm -f "$STATE_FILE"
     hypridle >/dev/null 2>&1 &
-    notify-send -a "Caffeine" "Caffeine Kapalı" "Ekran kilidi ve uyku modu yeniden devrede." -t 2500
+    notify-send -a "Caffeine" "Caffeine Off" "Screen lock and sleep have been restored." -t 2500
     echo "inactive"
 fi

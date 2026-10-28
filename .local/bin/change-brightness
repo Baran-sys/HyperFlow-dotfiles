@@ -61,5 +61,5 @@ done
 if [ "${QUIET:-0}" != "1" ] && [ "${2:-}" != "--quiet" ]; then
     notify-send -a "Brightness" -t 1200 \
         -h string:x-dunst-stack-tag:brightness -h int:value:"$new_pct" \
-        -i display-brightness-symbolic "Parlaklık" "%$new_pct"
+        -i display-brightness-symbolic "Brightness" "${new_pct}%"
 fi

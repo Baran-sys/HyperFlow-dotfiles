@@ -254,7 +254,7 @@ scale slider:hover {
 
 class MediaPlayerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Medya Oynatıcı", application=app)
+        super().__init__(title="Media Player", application=app)
         self.set_default_size(310, 400)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -277,8 +277,8 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Medya Oynatıcı")
-        self.header.set_subtitle("MPRIS2 Denetleyici")
+        self.header.set_title("Media Player")
+        self.header.set_subtitle("MPRIS2 Controller")
         self.set_titlebar(self.header)
 
         # Content Box
@@ -302,15 +302,13 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         box_empty.pack_start(icon_box, False, False, 0)
 
         lbl_empty_title = Gtk.Label()
-        lbl_empty_title.set_markup("<span size='large' weight='bold' foreground='#cdd6f4'>Medya Oynatıcı Boşta</span>")
+        lbl_empty_title.set_markup("<span size='large' weight='bold' foreground='#cdd6f4'>No Media Playing</span>")
         box_empty.pack_start(lbl_empty_title, False, False, 0)
 
         lbl_empty_desc = Gtk.Label()
-        lbl_empty_desc.set_markup("<small><span foreground='#a6adc8'>Spotify veya bir medya oynatıcı açtığınızda\nburadan kontrol edebilirsiniz.</span></small>")
+        lbl_empty_desc.set_markup("<small><span foreground='#a6adc8'>Start Spotify or another media player\nto control playback here.</span></small>")
         lbl_empty_desc.set_justify(Gtk.Justification.CENTER)
         box_empty.pack_start(lbl_empty_desc, False, False, 0)
-
-
 
         self.content_stack.add_named(box_empty, "empty")
 
@@ -325,10 +323,10 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
 
         self.chip_player = Gtk.Label()
         self.chip_player.get_style_context().add_class("player-chip")
-        self.chip_player.set_markup("<span foreground='#a6e3a1'>●</span> Medya")
+        self.chip_player.set_markup("<span foreground='#a6e3a1'>●</span> Media")
         self.status_bar.pack_start(self.chip_player, False, False, 0)
 
-        self.lbl_footer = Gtk.Label(label="Hazır")
+        self.lbl_footer = Gtk.Label(label="Ready")
         self.lbl_footer.set_ellipsize(Pango.EllipsizeMode.END)
         self.status_bar.pack_start(self.lbl_footer, True, True, 0)
 
@@ -456,7 +454,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         self.img_shuffle.set_pixel_size(15)
         self.btn_shuffle.set_image(self.img_shuffle)
         self.btn_shuffle.get_style_context().add_class("btn-m3-ghost")
-        self.btn_shuffle.set_tooltip_text("Karışık Çalma (Açık/Kapalı)")
+        self.btn_shuffle.set_tooltip_text("Shuffle Playback (On/Off)")
         self.btn_shuffle.connect("clicked", lambda b: self.toggle_shuffle())
         self.btn_shuffle.set_valign(Gtk.Align.CENTER)
         ctrl_box.pack_start(self.btn_shuffle, False, False, 0)
@@ -467,7 +465,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         self.img_prev.set_pixel_size(16)
         self.btn_prev.set_image(self.img_prev)
         self.btn_prev.get_style_context().add_class("btn-m3-tonal")
-        self.btn_prev.set_tooltip_text("Önceki Parça")
+        self.btn_prev.set_tooltip_text("Previous Track")
         self.btn_prev.connect("clicked", lambda b: subprocess.Popen(["playerctl", "previous"]))
         self.btn_prev.set_valign(Gtk.Align.CENTER)
         ctrl_box.pack_start(self.btn_prev, False, False, 0)
@@ -478,7 +476,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         self.img_play.set_pixel_size(24)
         self.btn_play.set_image(self.img_play)
         self.btn_play.get_style_context().add_class("btn-m3-play")
-        self.btn_play.set_tooltip_text("Oynat / Duraklat")
+        self.btn_play.set_tooltip_text("Play / Pause")
         self.btn_play.connect("clicked", lambda b: subprocess.Popen(["playerctl", "play-pause"]))
         self.btn_play.set_valign(Gtk.Align.CENTER)
         ctrl_box.pack_start(self.btn_play, False, False, 0)
@@ -489,7 +487,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         self.img_next.set_pixel_size(16)
         self.btn_next.set_image(self.img_next)
         self.btn_next.get_style_context().add_class("btn-m3-tonal")
-        self.btn_next.set_tooltip_text("Sonraki Parça")
+        self.btn_next.set_tooltip_text("Next Track")
         self.btn_next.connect("clicked", lambda b: subprocess.Popen(["playerctl", "next"]))
         self.btn_next.set_valign(Gtk.Align.CENTER)
         ctrl_box.pack_start(self.btn_next, False, False, 0)
@@ -500,7 +498,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
         self.img_loop.set_pixel_size(15)
         self.btn_loop.set_image(self.img_loop)
         self.btn_loop.get_style_context().add_class("btn-m3-ghost")
-        self.btn_loop.set_tooltip_text("Tekrar Çalma (Kapalı / Liste / Parça)")
+        self.btn_loop.set_tooltip_text("Repeat Mode (Off / Playlist / Track)")
         self.btn_loop.connect("clicked", lambda b: self.cycle_loop())
         self.btn_loop.set_valign(Gtk.Align.CENTER)
         ctrl_box.pack_start(self.btn_loop, False, False, 0)
@@ -532,10 +530,10 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
             ctx_shuf = self.btn_shuffle.get_style_context()
             if is_shuf:
                 ctx_shuf.add_class("active")
-                self.btn_shuffle.set_tooltip_text("Karışık Çalma: Açık")
+                self.btn_shuffle.set_tooltip_text("Shuffle: On")
             else:
                 ctx_shuf.remove_class("active")
-                self.btn_shuffle.set_tooltip_text("Karışık Çalma: Kapalı")
+                self.btn_shuffle.set_tooltip_text("Shuffle: Off")
         except Exception:
             pass
 
@@ -547,15 +545,15 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
             if loop_val == "Track":
                 ctx_loop.add_class("active")
                 self.img_loop.set_from_icon_name("media-playlist-repeat-song-symbolic", Gtk.IconSize.BUTTON)
-                self.btn_loop.set_tooltip_text("Tekrar: Tek Parça")
+                self.btn_loop.set_tooltip_text("Repeat: Single Track")
             elif loop_val == "Playlist":
                 ctx_loop.add_class("active")
                 self.img_loop.set_from_icon_name("media-playlist-repeat-symbolic", Gtk.IconSize.BUTTON)
-                self.btn_loop.set_tooltip_text("Tekrar: Çalma Listesi")
+                self.btn_loop.set_tooltip_text("Repeat: Playlist")
             else:
                 ctx_loop.remove_class("active")
                 self.img_loop.set_from_icon_name("media-playlist-repeat-symbolic", Gtk.IconSize.BUTTON)
-                self.btn_loop.set_tooltip_text("Tekrar: Kapalı")
+                self.btn_loop.set_tooltip_text("Repeat: Off")
         except Exception:
             pass
 
@@ -668,9 +666,9 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
             )
             if meta_res.returncode != 0 or not meta_res.stdout.strip():
                 self.content_stack.set_visible_child_name("empty")
-                self.header.set_subtitle("Aktif Oynatıcı Yok")
-                self.chip_player.set_markup("<span foreground='#6c7086'>○</span> Boşta")
-                self.lbl_footer.set_text("Medya oynatıcı bekleniyor...")
+                self.header.set_subtitle("No Active Player")
+                self.chip_player.set_markup("<span foreground='#6c7086'>○</span> Idle")
+                self.lbl_footer.set_text("Waiting for media player...")
                 self.current_art_url = None
                 self.img_art.set_from_icon_name("audio-x-generic-symbolic", Gtk.IconSize.DIALOG)
                 return True
@@ -691,11 +689,11 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
                 self.content_stack.set_visible_child_name("player")
                 status_icon = "●" if status == "Playing" else "○"
                 status_color = "#a6adc8"
-                status_text = "Çalıyor" if status == "Playing" else "Duraklatıldı"
+                status_text = "Playing" if status == "Playing" else "Paused"
                 self.header.set_subtitle(f"{player_name.capitalize()}  •  {status_text}")
                 self.chip_player.set_markup(f"<span foreground='{status_color}'>{status_icon}</span> {player_name.capitalize()}")
-                self.lbl_title.set_text(title or "Bilinmeyen Başlık")
-                self.lbl_artist.set_text(artist or "Bilinmeyen Sanatçı")
+                self.lbl_title.set_text(title or "Unknown Title")
+                self.lbl_artist.set_text(artist or "Unknown Artist")
                 self.lbl_album.set_text(album or "")
 
                 # Play/Pause Icon

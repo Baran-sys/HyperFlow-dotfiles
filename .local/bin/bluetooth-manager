@@ -165,7 +165,7 @@ row:selected {
 
 class BluetoothManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Bluetooth Yöneticisi", application=app)
+        super().__init__(title="Bluetooth Manager", application=app)
         self.set_default_size(380, 440)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -189,20 +189,20 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Bluetooth Yöneticisi")
-        self.header.set_subtitle("Cihazlar taranıyor...")
+        self.header.set_title("Bluetooth Manager")
+        self.header.set_subtitle("Scanning devices...")
         self.set_titlebar(self.header)
 
         # Power Switch
         self.switch_bt = Gtk.Switch()
         self.switch_bt.set_valign(Gtk.Align.CENTER)
-        self.switch_bt.set_tooltip_text("Bluetooth Aç / Kapat")
+        self.switch_bt.set_tooltip_text("Toggle Bluetooth")
         self.switch_bt.connect("notify::active", self.on_bt_switch_toggled)
         self.header.pack_start(self.switch_bt)
 
         # Refresh / Scan Button
         self.btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-        self.btn_refresh.set_tooltip_text("Cihazları Tara / Yenile")
+        self.btn_refresh.set_tooltip_text("Scan / Refresh Devices")
         self.btn_refresh.connect("clicked", lambda b: self.start_scan(rescan=True))
         self.header.pack_start(self.btn_refresh)
 
@@ -212,7 +212,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
 
         # Settings Button
         self.btn_settings = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
-        self.btn_settings.set_tooltip_text("Blueman Yöneticisi")
+        self.btn_settings.set_tooltip_text("Blueman Settings")
         self.btn_settings.connect("clicked", lambda b: subprocess.Popen(["blueman-manager"]))
         self.header.pack_end(self.btn_settings)
 
@@ -228,7 +228,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         # Search Entry
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.get_style_context().add_class("search-box")
-        self.search_entry.set_placeholder_text("Cihazlarda ara...")
+        self.search_entry.set_placeholder_text("Search devices...")
         self.search_entry.connect("search-changed", self.on_search_changed)
         main_box.pack_start(self.search_entry, False, False, 0)
 
@@ -245,7 +245,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         # Status Bar
         self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.status_box.get_style_context().add_class("status-bar")
-        self.lbl_status_left = Gtk.Label(label="Durum yükleniyor...")
+        self.lbl_status_left = Gtk.Label(label="Loading status...")
         self.lbl_status_right = Gtk.Label(label="")
         self.status_box.pack_start(self.lbl_status_left, False, False, 0)
         self.status_box.pack_end(self.lbl_status_right, False, False, 0)
@@ -293,14 +293,14 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         cmd = "on" if state else "off"
         def toggle_thread():
             subprocess.run(["bluetoothctl", "power", cmd], capture_output=True)
-            GLib.idle_add(lambda: self.start_scan(rescan=True) if state else self.clear_list("Bluetooth Kapalı"))
+            GLib.idle_add(lambda: self.start_scan(rescan=True) if state else self.clear_list("Bluetooth Off"))
         threading.Thread(target=toggle_thread, daemon=True).start()
 
     def clear_list(self, msg=""):
         for child in self.listbox.get_children():
             self.listbox.remove(child)
         self.header.set_subtitle(msg)
-        self.lbl_status_left.set_text("Bluetooth devre dışı")
+        self.lbl_status_left.set_text("Bluetooth disabled")
         self.lbl_status_right.set_text("")
 
     def start_scan(self, rescan=True):
@@ -309,7 +309,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.is_scanning = True
         self.spinner.start()
         self.btn_refresh.set_sensitive(False)
-        self.header.set_subtitle("Cihazlar taranıyor...")
+        self.header.set_subtitle("Scanning devices...")
 
         threading.Thread(target=self._scan_worker, args=(rescan,), daemon=True).start()
 
@@ -325,7 +325,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
                 self.switch_bt.handler_unblock_by_func(self.on_bt_switch_toggled)
             GLib.idle_add(_sync_switch)
             if not is_powered:
-                GLib.idle_add(self.clear_list, "Bluetooth Kapalı")
+                GLib.idle_add(self.clear_list, "Bluetooth Off")
                 return
         except Exception:
             pass
@@ -414,20 +414,20 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.devices = devices
 
         if connected_names:
-            sub = f"Bağlı: {', '.join(connected_names)}"
+            sub = f"Connected: {', '.join(connected_names)}"
             self.header.set_subtitle(sub)
             self.lbl_status_left.set_text(sub)
         else:
-            self.header.set_subtitle("Bluetooth Açık")
-            self.lbl_status_left.set_text("Bağlantı yok")
+            self.header.set_subtitle("Bluetooth On")
+            self.lbl_status_left.set_text("No connection")
 
-        self.lbl_status_right.set_text(f"{len(devices)} cihaz bulundu")
+        self.lbl_status_right.set_text(f"{len(devices)} devices found")
 
         for child in self.listbox.get_children():
             self.listbox.remove(child)
 
         if not devices:
-            lbl_empty = Gtk.Label(label="Yakında eşleşmiş veya keşfedilmiş cihaz bulunamadı.\nYeniden taramak için Yenile butonuna tıklayın.")
+            lbl_empty = Gtk.Label(label="No paired or discovered devices found nearby.\nClick the Refresh button to scan again.")
             lbl_empty.get_style_context().add_class("empty-label")
             lbl_empty.set_line_wrap(True)
             lbl_empty.set_justify(Gtk.Justification.CENTER)
@@ -468,7 +468,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         title_box.pack_start(lbl_name, False, False, 0)
 
         if dev["paired"] and not dev["connected"]:
-            lbl_paired = Gtk.Label(label="Eşleşti")
+            lbl_paired = Gtk.Label(label="Paired")
             lbl_paired.get_style_context().add_class("badge-paired")
             title_box.pack_start(lbl_paired, False, False, 0)
 
@@ -478,24 +478,24 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         vbox.pack_start(lbl_mac, False, False, 0)
 
         if dev["connected"]:
-            lbl_conn = Gtk.Label(label="Bağlı")
+            lbl_conn = Gtk.Label(label="Connected")
             lbl_conn.get_style_context().add_class("badge-connected")
             lbl_conn.set_valign(Gtk.Align.CENTER)
             hbox.pack_end(lbl_conn, False, False, 4)
 
-            btn_disc = Gtk.Button(label="Bağlantıyı Kes")
+            btn_disc = Gtk.Button(label="Disconnect")
             btn_disc.get_style_context().add_class("btn-disconnect")
             btn_disc.set_valign(Gtk.Align.CENTER)
             btn_disc.connect("clicked", lambda b, m=dev["mac"]: self.disconnect_device(m))
             hbox.pack_end(btn_disc, False, False, 4)
         elif dev["paired"]:
-            btn_conn = Gtk.Button(label="Bağlan")
+            btn_conn = Gtk.Button(label="Connect")
             btn_conn.get_style_context().add_class("btn-connect")
             btn_conn.set_valign(Gtk.Align.CENTER)
             btn_conn.connect("clicked", lambda b, m=dev["mac"]: self.connect_device(m))
             hbox.pack_end(btn_conn, False, False, 4)
         else:
-            btn_pair = Gtk.Button(label="Eşle & Bağlan")
+            btn_pair = Gtk.Button(label="Pair & Connect")
             btn_pair.get_style_context().add_class("btn-pair")
             btn_pair.set_valign(Gtk.Align.CENTER)
             btn_pair.connect("clicked", lambda b, m=dev["mac"]: self.pair_and_connect(m))
@@ -511,25 +511,25 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
             mac = dev["mac"]
 
             if dev["connected"]:
-                item_disc = Gtk.MenuItem(label="Bağlantıyı Kes")
+                item_disc = Gtk.MenuItem(label="Disconnect")
                 item_disc.connect("activate", lambda i: self.disconnect_device(mac))
                 menu.append(item_disc)
             else:
-                item_conn = Gtk.MenuItem(label="Bağlan")
+                item_conn = Gtk.MenuItem(label="Connect")
                 item_conn.connect("activate", lambda i: self.connect_device(mac))
                 menu.append(item_conn)
 
             if not dev["paired"]:
-                item_pair = Gtk.MenuItem(label="Eşle")
+                item_pair = Gtk.MenuItem(label="Pair")
                 item_pair.connect("activate", lambda i: self.pair_and_connect(mac))
                 menu.append(item_pair)
 
-            item_remove = Gtk.MenuItem(label="Bu Cihazı Kaldır / Unut")
+            item_remove = Gtk.MenuItem(label="Forget / Remove Device")
             item_remove.connect("activate", lambda i: self.remove_device(mac))
             menu.append(item_remove)
 
             menu.append(Gtk.SeparatorMenuItem())
-            item_blueman = Gtk.MenuItem(label="Blueman Ayrıntılı Yönetici...")
+            item_blueman = Gtk.MenuItem(label="Advanced Blueman Settings...")
             item_blueman.connect("activate", lambda i: subprocess.Popen(["blueman-manager"]))
             menu.append(item_blueman)
 
@@ -539,7 +539,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         return False
 
     def connect_device(self, mac):
-        self.show_info(f"Cihaza bağlanılıyor ({mac})...", Gtk.MessageType.INFO)
+        self.show_info(f"Connecting to device ({mac})...", Gtk.MessageType.INFO)
         self.spinner.start()
         def t():
             try:
@@ -556,28 +556,28 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
                     if "Connected: yes" in info_res.stdout or "Connection successful" in out:
                         connected = True
                         break
-                    last_err = out.strip().splitlines()[-1] if out.strip() else "Cihaz yanıt vermedi"
+                    last_err = out.strip().splitlines()[-1] if out.strip() else "Device did not respond"
                     # Wake up / rediscover sleeping or advertisement-idle device before next attempt
                     subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
                     time.sleep(0.4)
 
                 if connected:
-                    GLib.idle_add(self._on_action_finished, "Bağlandı", Gtk.MessageType.INFO)
+                    GLib.idle_add(self._on_action_finished, "Connected", Gtk.MessageType.INFO)
                 else:
-                    GLib.idle_add(self._on_action_finished, f"Bağlantı hatası: {last_err}", Gtk.MessageType.ERROR)
+                    GLib.idle_add(self._on_action_finished, f"Connection error: {last_err}", Gtk.MessageType.ERROR)
             except Exception as e:
-                GLib.idle_add(self._on_action_finished, f"Bağlantı hatası: {e}", Gtk.MessageType.ERROR)
+                GLib.idle_add(self._on_action_finished, f"Connection error: {e}", Gtk.MessageType.ERROR)
         threading.Thread(target=t, daemon=True).start()
 
     def disconnect_device(self, mac):
-        self.show_info("Bağlantı kesiliyor...", Gtk.MessageType.INFO)
+        self.show_info("Disconnecting...", Gtk.MessageType.INFO)
         def t():
             subprocess.run(["bluetoothctl", "disconnect", mac], capture_output=True)
-            GLib.idle_add(self._on_action_finished, "Bağlantı kesildi", Gtk.MessageType.INFO)
+            GLib.idle_add(self._on_action_finished, "Disconnected", Gtk.MessageType.INFO)
         threading.Thread(target=t, daemon=True).start()
 
     def pair_and_connect(self, mac):
-        self.show_info(f"Eşleşme başlatılıyor ({mac})...", Gtk.MessageType.INFO)
+        self.show_info(f"Pairing with device ({mac})...", Gtk.MessageType.INFO)
         self.spinner.start()
         def t():
             subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
@@ -590,7 +590,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
             ok = ("Connected: yes" in info_res.stdout) or (res.returncode == 0)
             GLib.idle_add(
                 self._on_action_finished,
-                "Eşleşti ve bağlandı!" if ok else "Eşleşme tamamlandı (bağlantı kurulamadı)",
+                "Paired and connected!" if ok else "Pairing complete (connection failed)",
                 Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING
             )
         threading.Thread(target=t, daemon=True).start()

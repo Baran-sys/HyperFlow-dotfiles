@@ -77,7 +77,7 @@ REQUIRED_PACKAGES=(
 )
 
 install_dependencies() {
-    echo -e "${BLUE}[1/5] Bağımlılıklar kontrol ediliyor...${NC}"
+    echo -e "${BLUE}[1/5] Checking dependencies...${NC}"
 
     PKG_MANAGER=""
     if command -v paru &>/dev/null; then
@@ -89,19 +89,19 @@ install_dependencies() {
     fi
 
     if [ -n "$PKG_MANAGER" ]; then
-        echo -e "Paket yöneticisi tespit edildi: ${GREEN}${PKG_MANAGER}${NC}"
-        read -p "Eksik paketleri otomatik yüklemek istiyor musunuz? [E/h]: " -r install_choice
-        install_choice=${install_choice:-E}
-        if [[ $install_choice =~ ^[Ee]$ ]]; then
-            echo -e "${YELLOW}Gerekli paketler yükleniyor...${NC}"
+        echo -e "Package manager detected: ${GREEN}${PKG_MANAGER}${NC}"
+        read -p "Do you want to automatically install missing packages? [Y/n]: " -r install_choice
+        install_choice=${install_choice:-Y}
+        if [[ $install_choice =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Installing required packages...${NC}"
             $PKG_MANAGER -S --needed --noconfirm "${REQUIRED_PACKAGES[@]}" || {
-                echo -e "${RED}Bazı paketler yüklenemedi. Devam ediliyor...${NC}"
+                echo -e "${RED}Some packages could not be installed. Continuing...${NC}"
             }
         else
-            echo -e "${YELLOW}Paket kurulumu atlandı.${NC}"
+            echo -e "${YELLOW}Package installation skipped.${NC}"
         fi
     else
-        echo -e "${YELLOW}Desteklenen bir Arch paket yöneticisi bulunamadı. Lütfen gerekli paketleri manuel kurun:${NC}"
+        echo -e "${YELLOW}No supported Arch package manager found. Please install the required packages manually:${NC}"
         echo "${REQUIRED_PACKAGES[*]}"
     fi
 }
@@ -110,7 +110,7 @@ install_dependencies() {
 # 2. Backup Existing Configs
 # ------------------------------------------------------------------------------
 backup_configs() {
-    echo -e "\n${BLUE}[2/5] Mevcut yapılandırmalar yedekleniyor...${NC}"
+    echo -e "\n${BLUE}[2/5] Backing up existing configurations...${NC}"
     mkdir -p "$BACKUP_DIR"
 
     CONFIGS_TO_BACKUP=(hypr waybar assets dunst kitty tofi rofi wlogout gtk-3.0 xsettingsd Kvantum qt5ct qt6ct kdeglobals mimeapps.list)
@@ -121,14 +121,14 @@ backup_configs() {
         fi
     done
 
-    echo -e "${GREEN}Yedekleme tamamlandı: ${BACKUP_DIR}${NC}"
+    echo -e "${GREEN}Backup completed: ${BACKUP_DIR}${NC}"
 }
 
 # ------------------------------------------------------------------------------
 # 3. Copy Config Files & Auto-Configure Hardware / Monitor Specs
 # ------------------------------------------------------------------------------
 copy_dotfiles() {
-    echo -e "\n${BLUE}[3/5] Yapılandırma dosyaları ~/.config dizinine kopyalanıyor...${NC}"
+    echo -e "\n${BLUE}[3/5] Copying configuration files to ~/.config...${NC}"
     mkdir -p "${HOME}/.config"
 
     # Preserve existing user monitor/workspace overrides if present
@@ -159,7 +159,7 @@ copy_dotfiles() {
         ' 2>/dev/null || true)
         if [ -n "$mon_spec" ]; then
             echo "$mon_spec" > "${HOME}/.config/hypr/monitors.conf"
-            echo -e "  ✓ Monitör otomatik algılandı ve kaydedildi: ${CYAN}${mon_spec}${NC}"
+            echo -e "  ✓ Primary monitor auto-detected and saved: ${CYAN}${mon_spec}${NC}"
         fi
     fi
 
@@ -167,14 +167,14 @@ copy_dotfiles() {
         echo "$saved_workspaces" > "${HOME}/.config/hypr/workspaces.conf"
     fi
 
-    echo -e "${GREEN}✓ ~/.config dosyaları başarıyla yerleştirildi.${NC}"
+    echo -e "${GREEN}✓ Successfully installed ~/.config files.${NC}"
 }
 
 # ------------------------------------------------------------------------------
 # 4. Copy Scripts, Libraries, Desktop Entries & Default MIME Associations
 # ------------------------------------------------------------------------------
 install_scripts_and_apps() {
-    echo -e "\n${BLUE}[4/5] Özel appletler ve betikler ~/.local dizinine yükleniyor...${NC}"
+    echo -e "\n${BLUE}[4/5] Installing custom applets and scripts to ~/.local...${NC}"
     mkdir -p "${HOME}/.local/bin"
     mkdir -p "${HOME}/.local/lib"
     mkdir -p "${HOME}/.local/share/applications"
@@ -183,19 +183,19 @@ install_scripts_and_apps() {
     if [ -d "${SCRIPT_DIR}/.local/bin" ]; then
         cp -ra "${SCRIPT_DIR}/.local/bin/"* "${HOME}/.local/bin/"
         chmod +x "${HOME}/.local/bin/"*
-        echo -e "  ✓ Betikler ve appletler ~/.local/bin/ içine yüklendi (chmod +x uygulandı)."
+        echo -e "  ✓ Scripts and applets installed to ~/.local/bin/ (chmod +x applied)."
     fi
 
     # Copy shared libraries (e.g. libspotify-notray.so)
     if [ -d "${SCRIPT_DIR}/.local/lib" ]; then
         cp -ra "${SCRIPT_DIR}/.local/lib/"* "${HOME}/.local/lib/"
-        echo -e "  ✓ Kütüphaneler ~/.local/lib/ içine yüklendi."
+        echo -e "  ✓ Libraries installed to ~/.local/lib/."
     fi
 
     # Copy desktop applications (with NoDisplay=true on Waybar applets so Spotlight stays clean)
     if [ -d "${SCRIPT_DIR}/.local/share/applications" ]; then
         cp -ra "${SCRIPT_DIR}/.local/share/applications/"* "${HOME}/.local/share/applications/"
-        echo -e "  ✓ Masaüstü girişleri ~/.local/share/applications/ içine yüklendi."
+        echo -e "  ✓ Desktop entries installed to ~/.local/share/applications/."
         if command -v update-desktop-database &>/dev/null; then
             update-desktop-database "${HOME}/.local/share/applications" &>/dev/null || true
         fi
@@ -209,13 +209,13 @@ install_scripts_and_apps() {
         if [ -f "/usr/share/applications/org.kde.dolphin.desktop" ]; then
             xdg-mime default org.kde.dolphin.desktop inode/directory 2>/dev/null || true
         fi
-        echo -e "  ✓ Varsayılan MIME dosya ilişkilendirmeleri (text/plain, inode/x-empty, inode/directory) yapılandırıldı."
+        echo -e "  ✓ Default MIME associations (text/plain, inode/x-empty, inode/directory) configured."
     fi
 
     # Ensure XDG Desktop folder exists
-    local desktop_dir="${HOME}/Masaüstü"
+    local desktop_dir="${HOME}/Desktop"
     if command -v xdg-user-dir &>/dev/null; then
-        desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "${HOME}/Masaüstü")"
+        desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "${HOME}/Desktop")"
     fi
     mkdir -p "$desktop_dir" 2>/dev/null || true
 
@@ -230,8 +230,8 @@ install_scripts_and_apps() {
 
     # Ensure ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then
-        echo -e "${YELLOW}UYARI: ~/.local/bin dizini PATH ortam değişkeninizde görünmüyor.${NC}"
-        echo -e "Kabuk ayar dosyanıza (örn: ~/.zshrc veya ~/.bashrc) şu satırı ekleyin:"
+        echo -e "${YELLOW}WARNING: ~/.local/bin is not in your PATH environment variable.${NC}"
+        echo -e "Add the following line to your shell configuration (e.g. ~/.zshrc or ~/.bashrc):"
         echo -e "    ${BOLD}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
     fi
 }
@@ -240,9 +240,9 @@ install_scripts_and_apps() {
 # 5. Reload Hyprland
 # ------------------------------------------------------------------------------
 reload_environment() {
-    echo -e "\n${BLUE}[5/5] Ortam yenileniyor...${NC}"
+    echo -e "\n${BLUE}[5/5] Reloading environment...${NC}"
     if [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
-        echo -e "Hyprland oturumu tespit edildi, yapılandırma yeniden yükleniyor..."
+        echo -e "Hyprland session detected, reloading configuration..."
         hyprctl reload &>/dev/null || true
         killall waybar &>/dev/null || true
         sleep 0.2
@@ -250,9 +250,9 @@ reload_environment() {
         pkill -f "desktop-manager" &>/dev/null || true
         sleep 0.4
         hyprctl dispatch exec "${HOME}/.local/bin/desktop-manager" &>/dev/null || true
-        echo -e "${GREEN}✓ Hyprland, Waybar ve Masaüstü Yöneticisi (desktop-manager) yenilendi.${NC}"
+        echo -e "${GREEN}✓ Hyprland, Waybar and Desktop Manager reloaded successfully.${NC}"
     else
-        echo -e "${YELLOW}Aktif Hyprland oturumu bulunamadı. Yeni bir oturum başlattığınızda ayarlar aktif olacaktır.${NC}"
+        echo -e "${YELLOW}No active Hyprland session detected. Settings will take effect upon starting a new session.${NC}"
     fi
 }
 
@@ -264,6 +264,6 @@ install_scripts_and_apps
 reload_environment
 
 echo -e "\n${GREEN}${BOLD}================================================================="
-echo "  ✓ Kurulum Başarıyla Tamamlandı!"
+echo "  ✓ Installation Completed Successfully!"
 echo "=================================================================${NC}"
-echo -e "Yedekleriniz: ${CYAN}${BACKUP_DIR}${NC}\n"
+echo -e "Backup location: ${CYAN}${BACKUP_DIR}${NC}\n"

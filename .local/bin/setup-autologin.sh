@@ -7,20 +7,20 @@ if [ "$TARGET_USER" = "root" ] && [ -n "$USER" ] && [ "$USER" != "root" ]; then
 fi
 
 echo "================================================================="
-echo "  SDDM Otomatik Giriş (Autologin) Yapılandırması"
+echo "  SDDM Autologin Configuration"
 echo "================================================================="
 echo ""
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Sistem yapılandırma dosyalarını düzenlemek için root yetkisi gerekiyor."
-    echo "Lütfen sudo şifrenizi girin:"
+    echo "Root privileges are required to modify system configuration files."
+    echo "Please enter your sudo password:"
     exec sudo bash "$0" "$@"
 fi
 
-echo "[1/3] /etc/sddm.conf.d/ dizini kontrol ediliyor..."
+echo "[1/3] Checking /etc/sddm.conf.d/ directory..."
 mkdir -p /etc/sddm.conf.d
 
-echo "[2/3] Mevcut SDDM yapılandırmasındaki çakışan ayarlar temizleniyor..."
+echo "[2/3] Cleaning conflicting settings in existing SDDM configuration..."
 if [ -f /etc/sddm.conf.d/the_hyde_project.conf ]; then
     cp -a /etc/sddm.conf.d/the_hyde_project.conf /etc/sddm.conf.d/the_hyde_project.conf.bak
     python3 - "$TARGET_USER" << 'PYEOF' 2>/dev/null || true
@@ -38,7 +38,7 @@ with open('/etc/sddm.conf.d/the_hyde_project.conf', 'w') as f:
 PYEOF
 fi
 
-echo "[3/3] autologin.conf ve zz-autologin.conf ayarlanıyor..."
+echo "[3/3] Configuring autologin.conf and zz-autologin.conf..."
 cat << AUTOCONF > /etc/sddm.conf.d/autologin.conf
 [Autologin]
 User=${TARGET_USER}
@@ -55,9 +55,9 @@ AUTOCONF
 
 echo ""
 echo "================================================================="
-echo "  [OK] SDDM Otomatik Giriş Başarıyla Ayarlandı!"
-echo "  Kullanıcı : ${TARGET_USER}"
-echo "  Oturum    : hyprland.desktop"
+echo "  [OK] SDDM Autologin Configured Successfully!"
+echo "  User    : ${TARGET_USER}"
+echo "  Session : hyprland.desktop"
 echo "================================================================="
 echo ""
 read -p "Tamamlandı! Kapatmak için Enter tuşuna basın..."

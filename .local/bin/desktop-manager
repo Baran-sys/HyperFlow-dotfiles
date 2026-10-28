@@ -880,7 +880,7 @@ class DesktopManager(Gtk.Window):
         else:
             cr.set_source_rgba(0.192, 0.196, 0.267, p)
         cr.fill()
-        c_lbl = self.darea.create_pango_layout("İptal")
+        c_lbl = self.darea.create_pango_layout("Cancel")
         c_lbl.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font Medium 9.5"))
         _, cl_rect = c_lbl.get_pixel_extents()
         cr.set_source_rgba(0.804, 0.839, 0.957, p)
@@ -893,7 +893,7 @@ class DesktopManager(Gtk.Window):
         else:
             cr.set_source_rgba(0.796, 0.651, 0.969, p)
         cr.fill()
-        o_lbl = self.darea.create_pango_layout("Oluştur" if "Yeni" in self.modal_title else "Kaydet")
+        o_lbl = self.darea.create_pango_layout("Create" if "New" in self.modal_title else "Save")
         o_lbl.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font Bold 9.5"))
         _, ol_rect = o_lbl.get_pixel_extents()
         cr.set_source_rgba(0.067, 0.067, 0.106, p)
@@ -1440,34 +1440,34 @@ class DesktopManager(Gtk.Window):
         click_pos = (event.x, event.y)
         can_paste = bool(self.clipboard_paths) or self.has_system_clipboard_files()
         entries = [
-            {"label": "󰉋  Yeni Klasör", "cb": lambda: self.prompt_new_folder(click_pos)},
-            {"label": "󰈔  Yeni Metin Belgesi", "cb": lambda: self.prompt_new_file(click_pos)},
+            {"label": "󰉋  New Folder", "cb": lambda: self.prompt_new_folder(click_pos)},
+            {"label": "󰈔  New Text Document", "cb": lambda: self.prompt_new_file(click_pos)},
             {"type": "sep"},
-            {"label": "󰆒  Yapıştır", "cb": lambda: self.paste_clipboard(click_pos), "enabled": can_paste},
+            {"label": "󰆒  Paste", "cb": lambda: self.paste_clipboard(click_pos), "enabled": can_paste},
             {"type": "sep"},
-            {"label": "󰝰  Dosya Yöneticisinde Aç", "cb": lambda: subprocess.Popen(["dolphin", str(DESKTOP_DIR)])},
-            {"label": "  Burada Terminal Aç", "cb": lambda: subprocess.Popen(["kitty", "--directory", str(DESKTOP_DIR)])},
-            {"label": "󰑐  Yenile", "cb": lambda: self.reload_items()},
+            {"label": "󰝰  Open in File Manager", "cb": lambda: subprocess.Popen(["dolphin", str(DESKTOP_DIR)])},
+            {"label": "  Open Terminal Here", "cb": lambda: subprocess.Popen(["kitty", "--directory", str(DESKTOP_DIR)])},
+            {"label": "󰑐  Refresh", "cb": lambda: self.reload_items()},
         ]
         self.open_context_menu(event.x, event.y, entries, folder_item=None)
 
     def show_item_context_menu(self, event, item: DesktopItem):
         entries = [
-            {"label": "󰏌  Aç", "cb": lambda: self.open_item(item)},
+            {"label": "󰏌  Open", "cb": lambda: self.open_item(item)},
         ]
         if item.path.is_dir():
-            entries.append({"label": "  Burada Terminal Aç", "cb": lambda: subprocess.Popen(["kitty", "--directory", str(item.path)])})
+            entries.append({"label": "  Open Terminal Here", "cb": lambda: subprocess.Popen(["kitty", "--directory", str(item.path)])})
         else:
-            entries.append({"label": "󰨞  Düzenleyicide Aç", "cb": lambda: self.open_in_editor(item.path)})
+            entries.append({"label": "󰨞  Open in Editor", "cb": lambda: self.open_in_editor(item.path)})
 
         entries.extend([
             {"type": "sep"},
-            {"label": "󰆐  Kes", "cb": lambda: self.copy_selected(cut=True)},
-            {"label": "󰆏  Kopyala", "cb": lambda: self.copy_selected(cut=False)},
-            {"label": "󰑕  Yeniden Adlandır", "cb": lambda: self.prompt_rename(item)},
+            {"label": "󰆐  Cut", "cb": lambda: self.copy_selected(cut=True)},
+            {"label": "󰆏  Copy", "cb": lambda: self.copy_selected(cut=False)},
+            {"label": "󰑕  Rename", "cb": lambda: self.prompt_rename(item)},
             {"type": "sep"},
-            {"label": "󰩺  Çöp Kutusuna Taşı", "cb": lambda: self.delete_selected(permanent=False)},
-            {"label": "󰅖  Kalıcı Olarak Sil", "cb": lambda: self.delete_selected(permanent=True)},
+            {"label": "󰩺  Move to Trash", "cb": lambda: self.delete_selected(permanent=False)},
+            {"label": "󰅖  Delete Permanently", "cb": lambda: self.delete_selected(permanent=True)},
         ])
         self.open_context_menu(event.x, event.y, entries, folder_item=item if item.path.is_dir() else None)
 
@@ -1551,9 +1551,9 @@ class DesktopManager(Gtk.Window):
                     self.save_positions()
                 self.reload_items()
             except Exception as e:
-                self.notify("Hata", str(e))
+                self.notify("Error", str(e))
 
-        self.open_modal("Yeni Klasör", "Klasör adını girin:", "Yeni Klasör", create_cb)
+        self.open_modal("New Folder", "Enter folder name:", "New Folder", create_cb)
 
     def prompt_new_file(self, click_pos=None):
         def create_cb(name):
@@ -1567,16 +1567,16 @@ class DesktopManager(Gtk.Window):
                     self.save_positions()
                 self.reload_items()
             except Exception as e:
-                self.notify("Hata", str(e))
+                self.notify("Error", str(e))
 
-        self.open_modal("Yeni Metin Belgesi", "Dosya adını girin:", "Yeni Belge.txt", create_cb)
+        self.open_modal("New Text Document", "Enter file name:", "New Document.txt", create_cb)
 
     def prompt_rename(self, item: DesktopItem):
         def rename_cb(new_name):
             if new_name and new_name != item.name:
                 dst = item.path.parent / new_name
                 if dst.exists():
-                    self.notify("Hata", "Bu isimde bir dosya veya klasör zaten var.")
+                    self.notify("Error", "A file or folder with this name already exists.")
                     return
                 try:
                     old_pos = [item.col, item.row]
@@ -1590,9 +1590,9 @@ class DesktopManager(Gtk.Window):
                     self.selected_paths = {str(dst)}
                     self.reload_items()
                 except Exception as e:
-                    self.notify("Hata", str(e))
+                    self.notify("Error", str(e))
 
-        self.open_modal("Yeniden Adlandır", f"'{item.name}' için yeni ad:", item.name, rename_cb)
+        self.open_modal("Rename", f"Enter new name for '{item.name}':", item.name, rename_cb)
 
     def copy_selected(self, cut=False):
         self.clipboard_paths = [Path(p) for p in self.selected_paths if Path(p).exists()]
@@ -1646,7 +1646,7 @@ class DesktopManager(Gtk.Window):
                     self.positions[dst.name] = [col, row]
                     row += 1
             except Exception as e:
-                self.notify("Yapıştırma Hatası", str(e))
+                self.notify("Paste Error", str(e))
 
         if is_cut:
             self.clipboard_paths.clear()
@@ -1670,13 +1670,13 @@ class DesktopManager(Gtk.Window):
                 self.positions.pop(p.name, None)
                 self.folder_colors.pop(p.name, None)
             except Exception as e:
-                self.notify("Silme Hatası", str(e))
+                self.notify("Delete Error", str(e))
         self.selected_paths.clear()
         self.save_positions()
         self.reload_items()
 
     def notify(self, title, body):
-        subprocess.Popen(["notify-send", "-a", "Masaüstü", title, body])
+        subprocess.Popen(["notify-send", "-a", "Desktop", title, body])
 
 
 def main():

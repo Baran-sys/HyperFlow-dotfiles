@@ -158,7 +158,7 @@ combobox button {
 
 class AudioMixerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Ses Denetimi", application=app)
+        super().__init__(title="Audio Control", application=app)
         self.set_default_size(360, 410)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -179,12 +179,12 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Ses Denetimi & Karıştırıcı")
-        self.header.set_subtitle("Hoparlör & Mikrofon")
+        self.header.set_title("Audio Control & Mixer")
+        self.header.set_subtitle("Speakers & Microphone")
         self.set_titlebar(self.header)
 
         btn_pavu = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
-        btn_pavu.set_tooltip_text("Gelişmiş Ses Ayarları (pavucontrol)")
+        btn_pavu.set_tooltip_text("Advanced Audio Settings (pavucontrol)")
         btn_pavu.connect("clicked", lambda b: subprocess.Popen(["pavucontrol"]))
         self.header.pack_end(btn_pavu)
 
@@ -202,27 +202,27 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         switcher_box.set_margin_bottom(4)
         main_box.pack_start(switcher_box, False, False, 0)
 
-        # Tab 1: Çıkış (Output / Master)
+        # Tab 1: Output / Master
         page_output = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.build_output_tab(page_output)
-        stack.add_titled(page_output, "output", "Hoparlör")
+        stack.add_titled(page_output, "output", "Speakers")
 
-        # Tab 2: Giriş (Input / Mic)
+        # Tab 2: Input / Mic
         page_input = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.build_input_tab(page_input)
-        stack.add_titled(page_input, "input", "Mikrofon")
+        stack.add_titled(page_input, "input", "Microphone")
 
-        # Tab 3: Uygulamalar (Apps)
+        # Tab 3: Applications
         self.page_apps = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.build_apps_tab(self.page_apps)
-        stack.add_titled(self.page_apps, "apps", "Uygulamalar")
+        stack.add_titled(self.page_apps, "apps", "Applications")
 
         main_box.pack_start(stack, True, True, 0)
 
         # Status Bar
         self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.status_box.get_style_context().add_class("status-bar")
-        self.lbl_status = Gtk.Label(label="PipeWire Audio hazır")
+        self.lbl_status = Gtk.Label(label="PipeWire Audio Ready")
         self.status_box.pack_start(self.lbl_status, True, True, 0)
         main_box.pack_end(self.status_box, False, False, 0)
 
@@ -252,7 +252,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         card.get_style_context().add_class("device-card")
 
-        lbl_title = Gtk.Label(label="Ana Çıkış Aygıtı (Hoparlör)")
+        lbl_title = Gtk.Label(label="Master Output Device (Speakers)")
         lbl_title.get_style_context().add_class("card-title")
         lbl_title.set_halign(Gtk.Align.START)
         card.pack_start(lbl_title, False, False, 0)
@@ -268,7 +268,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         self.btn_mute_sink.get_style_context().add_class("btn-mute")
         self.img_mute_sink = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic", Gtk.IconSize.BUTTON)
         self.btn_mute_sink.set_image(self.img_mute_sink)
-        self.btn_mute_sink.set_tooltip_text("Sesi Kapat / Aç")
+        self.btn_mute_sink.set_tooltip_text("Mute / Unmute")
         self.btn_mute_sink.connect("toggled", self.on_sink_mute_toggled)
         ctrl_box.pack_start(self.btn_mute_sink, False, False, 0)
 
@@ -277,7 +277,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         self.scale_sink.connect("value-changed", self.on_sink_scale_changed)
         ctrl_box.pack_start(self.scale_sink, True, True, 0)
 
-        self.lbl_vol_sink = Gtk.Label(label="%0")
+        self.lbl_vol_sink = Gtk.Label(label="0%")
         self.lbl_vol_sink.get_style_context().add_class("volume-label")
         ctrl_box.pack_end(self.lbl_vol_sink, False, False, 0)
 
@@ -288,7 +288,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         card.get_style_context().add_class("device-card")
 
-        lbl_title = Gtk.Label(label="Giriş Aygıtı (Mikrofon)")
+        lbl_title = Gtk.Label(label="Input Device (Microphone)")
         lbl_title.get_style_context().add_class("card-title")
         lbl_title.set_halign(Gtk.Align.START)
         card.pack_start(lbl_title, False, False, 0)
@@ -304,7 +304,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         self.btn_mute_source.get_style_context().add_class("btn-mute")
         self.img_mute_source = Gtk.Image.new_from_icon_name("microphone-sensitivity-high-symbolic", Gtk.IconSize.BUTTON)
         self.btn_mute_source.set_image(self.img_mute_source)
-        self.btn_mute_source.set_tooltip_text("Mikrofonu Kapat / Aç")
+        self.btn_mute_source.set_tooltip_text("Mute / Unmute Microphone")
         self.btn_mute_source.connect("toggled", self.on_source_mute_toggled)
         ctrl_box.pack_start(self.btn_mute_source, False, False, 0)
 
@@ -313,7 +313,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
         self.scale_source.connect("value-changed", self.on_source_scale_changed)
         ctrl_box.pack_start(self.scale_source, True, True, 0)
 
-        self.lbl_vol_source = Gtk.Label(label="%100")
+        self.lbl_vol_source = Gtk.Label(label="100%")
         self.lbl_vol_source.get_style_context().add_class("volume-label")
         ctrl_box.pack_end(self.lbl_vol_source, False, False, 0)
 
@@ -389,7 +389,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
                                 self.combo_sources.set_active_id(src_name)
 
                     self._parse_app_streams(res_inputs.stdout)
-                    self.lbl_status.set_text(f"Çıkış: %{vol_out} {'(Sessiz)' if mute_out else ''}  •  Mikrofon: %{vol_in} {'(Sessiz)' if mute_in else ''}")
+                    self.lbl_status.set_text(f"Output: {vol_out}% {'(Muted)' if mute_out else ''}  •  Mic: {vol_in}% {'(Muted)' if mute_in else ''}")
                 finally:
                     self.updating_ui = False
 
@@ -447,7 +447,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
                 lines = b.splitlines()
                 stream_id = lines[0].strip()
                 name_m = re.search(r'application\.name\s*=\s*"([^"]+)"', b)
-                app_name = name_m.group(1) if name_m else f"Akış #{stream_id}"
+                app_name = name_m.group(1) if name_m else f"Stream #{stream_id}"
                 vol_m = re.search(r'Volume:.*?(\d+)%', b)
                 vol = int(vol_m.group(1)) if vol_m else 100
                 mute_m = re.search(r'Mute:\s+(\S+)', b)
@@ -458,7 +458,7 @@ class AudioMixerWindow(Gtk.ApplicationWindow):
                 found = True
 
             if not found:
-                lbl = Gtk.Label(label="Şu anda ses çalan aktif uygulama yok")
+                lbl = Gtk.Label(label="No active audio streams")
                 lbl.get_style_context().add_class("empty-label")
                 self.apps_box.pack_start(lbl, True, True, 0)
             self.apps_box.show_all()

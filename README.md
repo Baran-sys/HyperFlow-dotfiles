@@ -73,8 +73,9 @@ The installer checks and installs required packages, backs up your existing conf
 | `Super + B` | Web Browser (`firefox`) | `Super + P` | Color Picker (`hyprpicker`) |
 | `Super + C` | Code Editor (`code`) | `Super + L` | Lock Screen (`hyprlock`) |
 | `Super + O` | Notes (`obsidian`) | `Super + Q` | Close Active Window |
-| `Super + A` | App Launcher (`spotlight-menu`) | `Super + F` | Fullscreen |
+| `Super + A` | App Launcher (`spotlight-menu`) | `Super + H` | App Visibility Manager (Hide / Unhide apps) |
 | `Super + V` | Clipboard (`clipboard-menu`) | `Ctrl + Escape` | Toggle Waybar |
+| `Super + F` | Fullscreen Window | `Super + Shift + S` | Screenshot (Select Area) |
 | `Print` | Screenshot (Full Screen) | `Super + Alt + Print` | Screenshot (Select Area) |
 
 ---

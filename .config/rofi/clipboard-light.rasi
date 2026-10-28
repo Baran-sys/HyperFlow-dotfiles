@@ -63,7 +63,7 @@ prompt {
 entry {
     background-color: transparent;
     text-color: @fg-col;
-    placeholder: "Kopyalama Geçmişi...";
+    placeholder: "Clipboard History...";
     placeholder-color: @grey;
     cursor: text;
     font: "JetBrainsMono Nerd Font 14";

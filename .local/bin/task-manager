@@ -169,7 +169,7 @@ treeview header button {
 
 class TaskManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Görev Yöneticisi", application=app)
+        super().__init__(title="Task Manager", application=app)
         self.set_default_size(620, 440)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -194,12 +194,12 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Görev Yöneticisi")
-        self.header.set_subtitle("CPU • RAM • GPU Kaynak İzleyici")
+        self.header.set_title("Task Manager")
+        self.header.set_subtitle("CPU • RAM • GPU Resource Monitor")
         self.set_titlebar(self.header)
 
         btn_refresh = Gtk.Button.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON)
-        btn_refresh.set_tooltip_text("İşlem Listesini Yenile")
+        btn_refresh.set_tooltip_text("Refresh Process List")
         btn_refresh.connect("clicked", lambda b: (self.refresh_metrics(), self.trigger_refresh()))
         self.header.pack_start(btn_refresh)
 
@@ -211,7 +211,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         # 1. CPU Card
         self.card_cpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         self.card_cpu.get_style_context().add_class("metric-card")
-        self.card_cpu.set_tooltip_text("İşlemci (CPU)")
+        self.card_cpu.set_tooltip_text("Processor (CPU)")
         h_cpu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         lbl_cpu_t = Gtk.Label(label="CPU")
         lbl_cpu_t.get_style_context().add_class("metric-title")
@@ -243,7 +243,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         # 3. GPU Card (Universal: NVIDIA / AMD / Intel)
         self.card_gpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         self.card_gpu.get_style_context().add_class("metric-card")
-        self.card_gpu.set_tooltip_text("Ekran Kartı (GPU)")
+        self.card_gpu.set_tooltip_text("Graphics Card (GPU)")
         h_gpu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         lbl_gpu_t = Gtk.Label(label="GPU")
         lbl_gpu_t.get_style_context().add_class("metric-title")
@@ -262,7 +262,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         # Search Entry
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.get_style_context().add_class("search-box")
-        self.search_entry.set_placeholder_text("İşlem ara (İsim, PID, GPU veya kullanıcı)...")
+        self.search_entry.set_placeholder_text("Search processes (Name, PID, GPU or user)...")
         self.search_entry.connect("search-changed", self.on_search_changed)
         main_box.pack_start(self.search_entry, False, False, 0)
 
@@ -294,15 +294,15 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.status_box.get_style_context().add_class("status-bar")
 
-        self.lbl_proc_count = Gtk.Label(label="Yükleniyor...")
+        self.lbl_proc_count = Gtk.Label(label="Loading...")
         self.status_box.pack_start(self.lbl_proc_count, False, False, 0)
 
-        self.lbl_selected_proc = Gtk.Label(label="Bir işlem seçin")
+        self.lbl_selected_proc = Gtk.Label(label="Select a process")
         self.lbl_selected_proc.set_ellipsize(Pango.EllipsizeMode.END)
         self.lbl_selected_proc.set_max_width_chars(32)
         self.status_box.pack_start(self.lbl_selected_proc, True, True, 0)
 
-        self.btn_kill = Gtk.Button(label="İşlemi Sonlandır")
+        self.btn_kill = Gtk.Button(label="End Process")
         self.btn_kill.get_style_context().add_class("btn-kill")
         self.btn_kill.set_sensitive(False)
         self.btn_kill.connect("clicked", lambda b: self.kill_selected_process(signal.SIGTERM))
@@ -352,11 +352,11 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         col_pid.set_fixed_width(50)
         self.treeview.append_column(col_pid)
 
-        # 1: İşlem Adı
+        # 1: Process Name
         cell_name = Gtk.CellRendererText()
         cell_name.set_property("weight", Pango.Weight.BOLD)
         cell_name.set_property("ellipsize", Pango.EllipsizeMode.END)
-        col_name = Gtk.TreeViewColumn("İşlem Adı", cell_name, text=1)
+        col_name = Gtk.TreeViewColumn("Process Name", cell_name, text=1)
         col_name.set_sort_column_id(1)
         col_name.set_resizable(True)
         col_name.set_expand(True)
@@ -450,9 +450,9 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             self.lbl_cpu_v.set_text(f"%{cpu_pct:.1f}{temp_str}")
             self.pb_cpu.set_fraction(min(max(cpu_pct / 100.0, 0.0), 1.0))
             if cpu_temp is not None:
-                self.card_cpu.set_tooltip_text(f"İşlemci (CPU): %{cpu_pct:.1f} • Sıcaklık: {cpu_temp}°C")
+                self.card_cpu.set_tooltip_text(f"Processor (CPU): {cpu_pct:.1f}% • Temp: {cpu_temp}°C")
             else:
-                self.card_cpu.set_tooltip_text(f"İşlemci (CPU): %{cpu_pct:.1f}")
+                self.card_cpu.set_tooltip_text(f"Processor (CPU): {cpu_pct:.1f}%")
 
             mem = psutil.virtual_memory()
             used_gb = mem.used / (1024**3)
@@ -648,7 +648,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             for row in new_data:
                 self.store.append(row)
 
-            self.lbl_proc_count.set_text(f"{len(new_data)} işlem ({gpu_count} GPU)")
+            self.lbl_proc_count.set_text(f"{len(new_data)} processes ({gpu_count} GPU)")
         except Exception:
             pass
 
@@ -671,12 +671,12 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             self.selected_pid = model.get_value(iter, 0)
             self.selected_name = model.get_value(iter, 1)
             gpu_dev = model.get_value(iter, 5)
-            self.lbl_selected_proc.set_markup(f"Seçili: <b>{self.selected_name}</b> (PID: {self.selected_pid}, GPU: {gpu_dev})")
+            self.lbl_selected_proc.set_markup(f"Selected: <b>{self.selected_name}</b> (PID: {self.selected_pid}, GPU: {gpu_dev})")
             self.btn_kill.set_sensitive(True)
         else:
             self.selected_pid = None
             self.selected_name = ""
-            self.lbl_selected_proc.set_text("Bir işlem seçin")
+            self.lbl_selected_proc.set_text("Select a process")
             self.btn_kill.set_sensitive(False)
 
     def kill_selected_process(self, sig):
@@ -693,9 +693,9 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                 flags=0,
                 message_type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
-                text="Yetki Hatası"
+                text="Permission Denied"
             )
-            dialog.format_secondary_text(f"PID {self.selected_pid} ({self.selected_name}) sonlandırılamadı: Root izinleri gerekebilir.")
+            dialog.format_secondary_text(f"Failed to terminate PID {self.selected_pid} ({self.selected_name}): Root privileges may be required.")
             self.is_showing_dialog = True
             try:
                 dialog.run()

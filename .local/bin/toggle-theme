@@ -98,9 +98,9 @@ if [ "$current" = "light" ]; then
     KVANTUM_THEME="wallbash"
     KDE_SCHEME="Noctalia"
     KDE_SRC="$HOME/.config/kdeglobals.mocha"
-    NOTIF_TITLE="Koyu Mod"
+    NOTIF_TITLE="Dark Mode"
     NOTIF_ICON="weather-clear-night-symbolic"
-    NOTIF_TEXT="Koyu tema (Catppuccin Mocha) aktif edildi."
+    NOTIF_TEXT="Dark theme (Catppuccin Mocha) activated."
     KITTY_THEME="Catppuccin-Mocha"
 else
     TARGET="light"
@@ -115,9 +115,9 @@ else
     KVANTUM_THEME="KvFlatLight"
     KDE_SCHEME="BreezeLight"
     KDE_SRC="$HOME/.config/kdeglobals.latte"
-    NOTIF_TITLE="Açık Mod"
+    NOTIF_TITLE="Light Mode"
     NOTIF_ICON="weather-clear-symbolic"
-    NOTIF_TEXT="Açık tema (Catppuccin Latte) aktif edildi."
+    NOTIF_TEXT="Light theme (Catppuccin Latte) activated."
     KITTY_THEME="Catppuccin-Latte"
 fi
 
@@ -138,7 +138,7 @@ if [ -f "$HOME/.config/waybar/style-$TARGET.css" ]; then
 fi
 
 # === 3. BILDIRIM ===
-notify-send -t 1500 -a "Tema" -i "$NOTIF_ICON" "$NOTIF_TITLE" "$NOTIF_TEXT" 2>/dev/null || true
+notify-send -t 1500 -a "Theme" -i "$NOTIF_ICON" "$NOTIF_TITLE" "$NOTIF_TEXT" 2>/dev/null || true
 
 # === 4. HYPRLAND PENCERE KENARLIKLARI ===
 hyprctl keyword general:col.active_border "$BORDER_ACTIVE" 2>/dev/null || true

@@ -213,20 +213,20 @@ row:hover {
 PROFILES = [
     {
         "id": "performance",
-        "name": "Yüksek Performans",
-        "desc": "Maksimum CPU gücü",
+        "name": "High Performance",
+        "desc": "Maximum system and CPU power",
         "icon": "speedometer-symbolic"
     },
     {
         "id": "balanced",
-        "name": "Dengeli",
-        "desc": "Pil ve hız arasında denge",
+        "name": "Balanced",
+        "desc": "Balance between power and speed",
         "icon": "battery-good-symbolic"
     },
     {
         "id": "power-saver",
-        "name": "Güç Tasarrufu",
-        "desc": "Düşük enerji, uzun pil ömrü",
+        "name": "Power Saver",
+        "desc": "Reduced power draw, longer battery life",
         "icon": "battery-caution-charging-symbolic"
     }
 ]
@@ -234,14 +234,14 @@ PROFILES = [
 REFRESH_RATES = [
     {
         "hz": 165,
-        "name": "165 Hz (Akıcı Mod)",
-        "desc": "Maksimum akıcılık, oyun ve animasyon",
+        "name": "165 Hz (Smooth Mode)",
+        "desc": "Maximum smoothness for gaming and motion",
         "icon": "video-display-symbolic"
     },
     {
         "hz": 60,
-        "name": "60 Hz (Pil Tasarrufu)",
-        "desc": "Düşük ekran tüketimi, uzun pil",
+        "name": "60 Hz (Power Saving)",
+        "desc": "Lower display power draw, longer battery life",
         "icon": "battery-symbolic"
     }
 ]
@@ -268,7 +268,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Güç & Ekran Profili")
+        self.header.set_title("Power & Display Profiles")
         self.set_titlebar(self.header)
 
         scrolled = Gtk.ScrolledWindow()
@@ -283,7 +283,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         card.get_style_context().add_class("battery-card")
 
         h_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.lbl_pct = Gtk.Label(label="Pil Yükleniyor...")
+        self.lbl_pct = Gtk.Label(label="Loading battery...")
         self.lbl_pct.get_style_context().add_class("battery-pct")
         h_box.pack_start(self.lbl_pct, False, False, 0)
 
@@ -306,9 +306,9 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         content_box.pack_start(card, False, False, 0)
 
         # 1. Section: Display Refresh Rate
-        lbl_hz_title = Gtk.Label(label="EKRAN YENİLEME HIZI (HZ)")
+        lbl_hz_title = Gtk.Label(label="DISPLAY REFRESH RATE (HZ)")
         lbl_hz_title.get_style_context().add_class("section-title")
-        lbl_hz_title.set_markup("<small><span alpha='65%'><b>EKRAN YENİLEME HIZI (HZ)</b></span></small>")
+        lbl_hz_title.set_markup("<small><span alpha='65%'><b>DISPLAY REFRESH RATE (HZ)</b></span></small>")
         lbl_hz_title.set_halign(Gtk.Align.START)
         content_box.pack_start(lbl_hz_title, False, False, 0)
 
@@ -317,9 +317,9 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         content_box.pack_start(self.listbox_hz, False, False, 0)
 
         # 2. Section: Power Profiles
-        lbl_prof_title = Gtk.Label(label="GÜÇ PROFİLİ")
+        lbl_prof_title = Gtk.Label(label="POWER PROFILE")
         lbl_prof_title.get_style_context().add_class("section-title")
-        lbl_prof_title.set_markup("<small><span alpha='65%'><b>GÜÇ PROFİLİ (CPU / ENERJİ)</b></span></small>")
+        lbl_prof_title.set_markup("<small><span alpha='65%'><b>POWER PROFILE (CPU / ENERGY)</b></span></small>")
         lbl_prof_title.set_halign(Gtk.Align.START)
         content_box.pack_start(lbl_prof_title, False, False, 0)
 
@@ -418,14 +418,14 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 return [
                     {
                         "hz": max_hz,
-                        "name": f"{max_hz} Hz (Akıcı Mod)",
-                        "desc": "Maksimum akıcılık, oyun ve animasyon",
+                        "name": f"{max_hz} Hz (Smooth Mode)",
+                        "desc": "Maximum motion clarity and responsiveness",
                         "icon": "video-display-symbolic"
                     },
                     {
                         "hz": low_hz,
-                        "name": f"{low_hz} Hz (Pil Tasarrufu)",
-                        "desc": "Düşük ekran tüketimi, uzun pil",
+                        "name": f"{low_hz} Hz (Power Saving)",
+                        "desc": "Lower display power consumption, longer battery",
                         "icon": "battery-symbolic"
                     }
                 ]
@@ -433,8 +433,8 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         return [
             {
                 "hz": hz_only,
-                "name": f"{hz_only} Hz (Standart Mod)",
-                "desc": "Monitör varsayılan yenileme hızı",
+                "name": f"{hz_only} Hz (Standard Mode)",
+                "desc": "Default display refresh rate",
                 "icon": "video-display-symbolic"
             }
         ]
@@ -450,12 +450,12 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         badge_style = "badge-time"
         time_detail = ""
         if not bat_dir:
-            return "Masaüstü • Prizde", "badge-full", "Doğrudan güç kaynağına bağlı"
+            return "Desktop • AC", "badge-full", "Connected to power source"
         try:
             if status == "Full":
-                time_badge = "Prizde • Tam Dolu"
+                time_badge = "Plugged In • Full"
                 badge_style = "badge-full"
-                time_detail = "Pil tam dolu, şarj aleti takılı"
+                time_detail = "Battery fully charged, AC adapter connected"
             else:
                 def _read_int(names):
                     for n in names:
@@ -471,27 +471,27 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                     if status == "Discharging":
                         mins = int((c_now / curr) * 60)
                         h, m = divmod(mins, 60)
-                        time_badge = f"{h} sa {m} dk kaldı" if h else f"{m} dk kaldı"
+                        time_badge = f"{h}h {m}m left" if h else f"{m}m left"
                         badge_style = "badge-discharging"
-                        time_detail = f"Kalan Pil Süresi: ~{h} saat {m} dakika"
+                        time_detail = f"Estimated battery life: ~{h}h {m}m"
                     elif status == "Charging":
                         mins = int(((c_full - c_now) / curr) * 60)
                         h, m = divmod(mins, 60)
-                        time_badge = f"{h} sa {m} dk doluma" if h else f"{m} dk doluma"
+                        time_badge = f"{h}h {m}m to full" if h else f"{m}m to full"
                         badge_style = "badge-time"
-                        time_detail = f"Tam Doluma Kalan Süre: ~{h} saat {m} dakika"
+                        time_detail = f"Estimated time until full: ~{h}h {m}m"
                 elif status == "Charging":
-                    time_badge = "Şarj Oluyor"
+                    time_badge = "Charging"
                     badge_style = "badge-time"
-                    time_detail = "Cihaz şarj ediliyor"
+                    time_detail = "Device is charging"
                 else:
-                    time_badge = "Prizde"
+                    time_badge = "Plugged In"
                     badge_style = "badge-full"
-                    time_detail = "Prizde çalışıyor"
+                    time_detail = "Running on AC power"
         except Exception:
-            time_badge = "Pilde"
+            time_badge = "On Battery"
             badge_style = "badge-discharging"
-            time_detail = "Pil gücüyle çalışıyor"
+            time_detail = "Running on battery power"
         return time_badge, badge_style, time_detail
 
     def get_battery_icon(self, cap_int, status):
@@ -517,7 +517,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         dynamic_rates = self.get_dynamic_refresh_rates(available_hz, current_hz)
 
         self.header.set_subtitle(f"{current_prof.capitalize()}  •  {current_hz} Hz")
-        self.lbl_footer.set_text(f"Plan: {current_prof.capitalize()}  •  Ekran: {current_hz} Hz ({mon_name})")
+        self.lbl_footer.set_text(f"Profile: {current_prof.capitalize()}  •  Display: {current_hz} Hz ({mon_name})")
 
         # Battery status & time calculation
         bat_dir = self.get_battery_dir()
@@ -534,11 +534,11 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 time_badge, badge_style, time_detail = self.get_battery_time_info(status, bat_dir)
 
                 if status == "Charging":
-                    status_tr = f"Durum: Şarj Oluyor ({time_detail})" if time_detail else "Durum: Şarj Oluyor"
+                    status_tr = f"Status: Charging ({time_detail})" if time_detail else "Status: Charging"
                 elif status == "Full":
-                    status_tr = "Durum: Tam Dolu (Prize Takılı)"
+                    status_tr = "Status: Fully Charged (Plugged In)"
                 else:
-                    status_tr = f"Durum: Pilde Çalışıyor ({time_detail})" if time_detail else "Durum: Pilde Çalışıyor"
+                    status_tr = f"Status: On Battery ({time_detail})" if time_detail else "Status: On Battery"
                 self.lbl_status.set_text(status_tr)
 
                 # Battery Health Calculation
@@ -558,9 +558,9 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
 
                 if b_design > 0 and b_full > 0:
                     health_pct = min(100, max(0, int(round((b_full / b_design) * 100))))
-                    health_txt = f"Pil Sağlığı: %{health_pct}"
+                    health_txt = f"Battery Health: {health_pct}%"
                     if b_cycles > 0:
-                        health_txt += f"  •  Döngü: {b_cycles}"
+                        health_txt += f"  •  Cycles: {b_cycles}"
                     self.lbl_health.set_markup(f"<small><span alpha='75%'>{health_txt}</span></small>")
                     self.lbl_health.show()
                 else:
@@ -573,17 +573,17 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 self.lbl_time_badge.set_text(time_badge)
                 self.lbl_time_badge.show()
             else:
-                self.lbl_pct.set_text("󰚥  AC Güç")
-                self.lbl_status.set_text("Durum: Masaüstü / Doğrudan Güç Kaynağı")
+                self.lbl_pct.set_text("󰚥  AC Power")
+                self.lbl_status.set_text("Status: Desktop / AC Power Supply")
                 self.lbl_health.hide()
                 self.lbl_time_badge.get_style_context().remove_class("badge-time")
                 self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
                 self.lbl_time_badge.get_style_context().add_class("badge-full")
-                self.lbl_time_badge.set_text("Prizde")
+                self.lbl_time_badge.set_text("Plugged In")
                 self.lbl_time_badge.show()
         except Exception:
             self.lbl_pct.set_text("󰁹  %100")
-            self.lbl_status.set_text("Durum: Prize Takılı")
+            self.lbl_status.set_text("Status: Plugged In")
             self.lbl_time_badge.hide()
 
         # Repopulate Refresh Rates
@@ -614,12 +614,12 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             hbox.pack_start(vbox, True, True, 0)
 
             if is_active:
-                badge = Gtk.Label(label="Aktif")
+                badge = Gtk.Label(label="Active")
                 badge.get_style_context().add_class("badge-hz-active")
                 badge.set_valign(Gtk.Align.CENTER)
                 hbox.pack_end(badge, False, False, 0)
             else:
-                btn_set = Gtk.Button(label="Seç")
+                btn_set = Gtk.Button(label="Select")
                 btn_set.get_style_context().add_class("btn-select")
                 btn_set.set_valign(Gtk.Align.CENTER)
                 btn_set.connect("clicked", lambda b, hz=r["hz"]: self.set_refresh_rate(hz))
@@ -662,12 +662,12 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             hbox.pack_start(vbox, True, True, 0)
 
             if is_active:
-                badge = Gtk.Label(label="Aktif")
+                badge = Gtk.Label(label="Active")
                 badge.get_style_context().add_class("badge-active")
                 badge.set_valign(Gtk.Align.CENTER)
                 hbox.pack_end(badge, False, False, 0)
             else:
-                btn_set = Gtk.Button(label="Seç")
+                btn_set = Gtk.Button(label="Select")
                 btn_set.get_style_context().add_class("btn-select")
                 btn_set.set_valign(Gtk.Align.CENTER)
                 btn_set.connect("clicked", lambda b, pid=p["id"]: self.set_profile(pid))

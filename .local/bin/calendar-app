@@ -111,15 +111,15 @@ calendar.button {
 }
 """
 
-DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-MONTHS_TR = [
-    "", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
-    "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+DAYS_EN = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MONTHS_EN = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
 ]
 
 class CalendarWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Takvim", application=app)
+        super().__init__(title="Calendar", application=app)
         self.set_default_size(350, 395)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -139,11 +139,11 @@ class CalendarWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Takvim & Saat")
+        self.header.set_title("Calendar & Clock")
         self.set_titlebar(self.header)
 
-        btn_today = Gtk.Button(label="Bugün")
-        btn_today.set_tooltip_text("Bugünün tarihine git")
+        btn_today = Gtk.Button(label="Today")
+        btn_today.set_tooltip_text("Go to today's date")
         btn_today.connect("clicked", lambda b: self.goto_today())
         self.header.pack_start(btn_today)
 
@@ -205,10 +205,10 @@ class CalendarWindow(Gtk.ApplicationWindow):
     def update_clock(self):
         now = datetime.now()
         self.lbl_time.set_text(now.strftime("%H:%M:%S"))
-        day_name = DAYS_TR[now.weekday()]
-        month_name = MONTHS_TR[now.month]
-        self.lbl_date.set_text(f"{now.day} {month_name} {now.year}, {day_name}")
-        self.header.set_subtitle(f"{now.day} {month_name} {now.year}")
+        day_name = DAYS_EN[now.weekday()]
+        month_name = MONTHS_EN[now.month]
+        self.lbl_date.set_text(f"{day_name}, {month_name} {now.day}, {now.year}")
+        self.header.set_subtitle(f"{month_name} {now.day}, {now.year}")
         return True
 
     def goto_today(self):
@@ -232,15 +232,15 @@ class CalendarWindow(Gtk.ApplicationWindow):
     def update_info_label(self):
         year, month, day = self.calendar.get_date()
         month += 1 # 0-indexed in Gtk.Calendar
-        month_name = MONTHS_TR[month]
+        month_name = MONTHS_EN[month]
         if day > 0:
             try:
                 sel_date = datetime(year, month, day)
-                day_name = DAYS_TR[sel_date.weekday()]
+                day_name = DAYS_EN[sel_date.weekday()]
                 day_of_year = sel_date.timetuple().tm_yday
                 week_no = sel_date.isocalendar()[1]
-                self.lbl_info.set_text(f"{day} {month_name} {year} ({day_name})  •  {week_no}. Hafta")
-                self.status_box.set_tooltip_text(f"{day} {month_name} {year} ({day_name}) • Yılın {day_of_year}. günü • {week_no}. Hafta")
+                self.lbl_info.set_text(f"{day_name}, {month_name} {day}, {year}  •  Week {week_no}")
+                self.status_box.set_tooltip_text(f"{day_name}, {month_name} {day}, {year} • Day {day_of_year} of the year • Week {week_no}")
             except ValueError:
                 self.lbl_info.set_text(f"{month_name} {year}")
                 self.status_box.set_tooltip_text(f"{month_name} {year}")
