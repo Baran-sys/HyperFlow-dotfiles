@@ -11,6 +11,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
+GLib.set_prgname("power-session")
 
 CSS_STYLE = b"""
 * {
@@ -94,7 +95,6 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Power Session", application=app)
         self.set_default_size(346, 102)
-        self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
@@ -264,7 +264,7 @@ class PowerSessionApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="org.antigravity.powersession",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.NON_UNIQUE
         )
         self.window = None
 

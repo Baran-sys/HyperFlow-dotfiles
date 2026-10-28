@@ -17,6 +17,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+GLib.set_prgname("task-manager")
 
 CSS_STYLE = b"""
 * {
@@ -171,7 +172,6 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Task Manager", application=app)
         self.set_default_size(620, 440)
-        self.set_position(Gtk.WindowPosition.CENTER)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
@@ -708,7 +708,7 @@ class TaskManagerApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="org.antigravity.taskmanager",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.NON_UNIQUE
         )
         self.window = None
 

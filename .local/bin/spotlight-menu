@@ -92,60 +92,79 @@ applets = {
     "power-menu.desktop", "power-session.desktop", "spotlight-manager.desktop"
 }
 
-apps = {}
-for d in sys_dirs:
-    if not d.exists():
-        continue
-    for f in sorted(d.glob("*.desktop")):
-        if f.name in applets or f.name in apps:
+selected_index = 0
+while True:
+    apps = {}
+    for d in sys_dirs:
+        if not d.exists():
             continue
+        for f in sorted(d.glob("*.desktop")):
+            if f.name in applets or f.name in apps:
+                continue
+            try:
+                text = f.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            if "[Desktop Entry]" not in text:
+                continue
+            name = None
+            nodisplay = False
+            hidden = False
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("[") and line != "[Desktop Entry]":
+                    break
+                if line.startswith("Name=") and not name:
+                    name = line.split("=", 1)[1].strip()
+                elif line.startswith("NoDisplay="):
+                    nodisplay = line.split("=", 1)[1].strip().lower() == "true"
+                elif line.startswith("Hidden="):
+                    hidden = line.split("=", 1)[1].strip().lower() == "true"
+            if hidden or not name:
+                continue
+            if nodisplay and f.parent != local_dir:
+                continue
+            apps[f.name] = (name, nodisplay, str(f))
+
+    # List: Show hidden apps first, then visible apps
+    items = sorted(apps.items(), key=lambda x: (not x[1][1], x[1][0].lower()))
+    menu_lines = []
+    lookup = {}
+    for fname, (name, is_hid, fpath) in items:
+        status = "󰈉  [Hidden]" if is_hid else "󰈈  [Visible]"
+        label = f"{status}  {name}  ({fname})"
+        menu_lines.append(label)
+        lookup[label] = fpath
+
+    if not menu_lines:
+        break
+
+    rofi_cmd = [
+        "rofi", "-dmenu", "-i",
+        "-p", "󰈈 ",
+        "-mesg", "Select an app to toggle visibility (Press Enter to toggle, Escape to close):",
+        "-selected-row", str(selected_index),
+        "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")
+    ]
+    proc = subprocess.run(
+        rofi_cmd,
+        input="\n".join(menu_lines),
+        text=True,
+        capture_output=True
+    )
+    if proc.returncode != 0:
+        # User pressed Escape or canceled
+        break
+
+    choice = proc.stdout.strip()
+    if choice in lookup:
         try:
-            text = f.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        if "[Desktop Entry]" not in text:
-            continue
-        name = None
-        nodisplay = False
-        hidden = False
-        for line in text.splitlines():
-            line = line.strip()
-            if line.startswith("[") and line != "[Desktop Entry]":
-                break
-            if line.startswith("Name=") and not name:
-                name = line.split("=", 1)[1].strip()
-            elif line.startswith("NoDisplay="):
-                nodisplay = line.split("=", 1)[1].strip().lower() == "true"
-            elif line.startswith("Hidden="):
-                hidden = line.split("=", 1)[1].strip().lower() == "true"
-        if hidden or not name:
-            continue
-        if nodisplay and f.parent != local_dir:
-            continue
-        apps[f.name] = (name, nodisplay, str(f))
-
-# List: Show hidden apps first, then visible apps
-items = sorted(apps.items(), key=lambda x: (not x[1][1], x[1][0].lower()))
-menu_lines = []
-lookup = {}
-for fname, (name, is_hid, fpath) in items:
-    status = "󰈉  [Hidden]" if is_hid else "󰈈  [Visible]"
-    label = f"{status}  {name}  ({fname})"
-    menu_lines.append(label)
-    lookup[label] = fpath
-
-if not menu_lines:
-    raise SystemExit(0)
-
-proc = subprocess.run(
-    ["rofi", "-dmenu", "-i", "-p", "󰈈 ", "-mesg", "Select an application to toggle visibility (Enter):", "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")],
-    input="\n".join(menu_lines),
-    text=True,
-    capture_output=True
-)
-choice = proc.stdout.strip()
-if proc.returncode == 0 and choice in lookup:
-    subprocess.run([os.path.expanduser("~/.local/bin/spotlight-menu"), "--toggle-file", lookup[choice]])
+            selected_index = menu_lines.index(choice)
+        except ValueError:
+            selected_index = 0
+        subprocess.run([os.path.expanduser("~/.local/bin/spotlight-menu"), "--toggle-file", lookup[choice]])
+    else:
+        break
 PYEOF
 }
 

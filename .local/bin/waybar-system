@@ -108,12 +108,12 @@ def get_metrics():
     gpu_temp = nv_temp if nv_temp > 0 else amd_temp
 
     tooltip_lines = [
-        f"CPU: %{cpu}{cpu_temp_str}",
-        f"RAM: {ram_used_gb:.1f}/{ram_total_gb:.0f} GB (%{ram_pct})"
+        f"CPU: {cpu}%{cpu_temp_str}",
+        f"RAM: {ram_used_gb:.1f}/{ram_total_gb:.0f} GB ({ram_pct}%)"
     ]
     if gpu_disp > 0 or gpu_temp > 0:
         t_str = f" ({gpu_temp}°C)" if gpu_temp > 0 else ""
-        tooltip_lines.append(f"GPU: %{gpu_disp}{t_str}")
+        tooltip_lines.append(f"GPU: {gpu_disp}%{t_str}")
     tooltip = chr(10).join(tooltip_lines)
 
     data = {

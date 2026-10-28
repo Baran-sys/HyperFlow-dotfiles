@@ -16,6 +16,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
+GLib.set_prgname("power-menu")
 
 CSS_STYLE = b"""
 * {
@@ -248,9 +249,8 @@ REFRESH_RATES = [
 
 class PowerMenuWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Güç ve Ekran Yönetimi", application=app)
+        super().__init__(title="Power & Display Profiles", application=app)
         self.set_default_size(340, 460)
-        self.set_position(Gtk.WindowPosition.CENTER)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
@@ -732,7 +732,7 @@ class PowerMenuApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="org.antigravity.powermenu",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.NON_UNIQUE
         )
         self.window = None
 

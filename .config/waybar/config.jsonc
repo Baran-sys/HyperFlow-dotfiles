@@ -67,9 +67,9 @@
         "format-linked": "󰈀  {ifname} (No IP)",
         "format-disconnected": "󰖪 ",
         "format-disabled": "󰖪 ",
-        "tooltip-format-disabled": "Wi-Fi kapalı",
-        "tooltip-format": "{essid} (%{signalStrength})\nIP: {ipaddr}",
-        "tooltip-format-disconnected": "Bağlantı yok",
+        "tooltip-format-disabled": "Wi-Fi disabled",
+        "tooltip-format": "{essid} ({signalStrength}%)\nIP: {ipaddr}",
+        "tooltip-format-disconnected": "No connection",
         "on-click": "$HOME/.local/bin/wifi-manager",
         "interval": 2,
         "on-click-right": "$HOME/.local/bin/toggle-wifi",
@@ -80,13 +80,13 @@
         "format-connected": " {device_alias}",
         "format-disabled": "󰂲",
         "format-off": "󰂲",
-        "tooltip-format": "Bluetooth açık (Bağlı cihaz yok)",
+        "tooltip-format": "Bluetooth on (No connected devices)",
         "tooltip-format-connected": "{device_enumerate}",
         "tooltip-format-enumerate-connected": "• {device_alias}",
         "on-click": "$HOME/.local/bin/bluetooth-manager",
         "on-click-right": "rfkill toggle bluetooth",
-        "tooltip-format-disabled": "Bluetooth kapalı",
-        "tooltip-format-off": "Bluetooth kapalı"
+        "tooltip-format-disabled": "Bluetooth disabled",
+        "tooltip-format-off": "Bluetooth disabled"
     },
     "custom/system": {
         "format": "{}",
@@ -97,7 +97,6 @@
         "tooltip": true
     },
     "backlight": {
-        
         "format": "{icon} {percent}%",
         "format-icons": [
             "󰃞",
@@ -105,7 +104,7 @@
             "󰃠"
         ],
         "tooltip": true,
-        "tooltip-format": "Parlaklık: %{percent}\n(Sağ Tık: Açık/Koyu Tema Değiştir)",
+        "tooltip-format": "Brightness: {percent}%\n(Right Click: Toggle Dark/Light Theme)",
         "on-click-right": "$HOME/.local/bin/toggle-theme",
         "on-scroll-up": "$HOME/.local/bin/change-brightness up",
         "on-scroll-down": "$HOME/.local/bin/change-brightness down",
@@ -134,10 +133,10 @@
             "󰂂",
             "󰁹"
         ],
-        "tooltip-format": "{timeTo} kaldı (%{capacity})",
-        "tooltip-format-charging": "{timeTo} doluma (%{capacity})",
-        "tooltip-format-plugged": "Prizde (%{capacity})",
-        "tooltip-format-full": "Tam dolu (%100)"
+        "tooltip-format": "{timeTo} remaining ({capacity}%)",
+        "tooltip-format-charging": "{timeTo} to full ({capacity}%)",
+        "tooltip-format-plugged": "Plugged in ({capacity}%)",
+        "tooltip-format-full": "Fully charged (100%)"
     },
     "pulseaudio": {
         "format": "{icon} {volume}%",
@@ -162,13 +161,13 @@
                 ""
             ]
         },
-        "tooltip-format": "{desc}: %{volume}",
-        "tooltip-format-muted": "{desc}: Sessiz"
+        "tooltip-format": "{desc}: {volume}%",
+        "tooltip-format-muted": "{desc}: Muted"
     },
     "custom/power": {
         "format": "",
         "tooltip": false,
-        "tooltip-format": "Güç ve Oturum Menüsü",
+        "tooltip-format": "Power & Session Menu",
         "on-click": "$HOME/.local/bin/power-session"
     }
 }

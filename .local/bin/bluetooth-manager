@@ -15,6 +15,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+GLib.set_prgname("bluetooth-manager")
 
 CSS_STYLE = b"""
 * {
@@ -167,7 +168,6 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Bluetooth Manager", application=app)
         self.set_default_size(380, 440)
-        self.set_position(Gtk.WindowPosition.CENTER)
 
         self.devices = []
         self.is_scanning = False
@@ -330,21 +330,44 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         except Exception:
             pass
 
-        # 2. Fast pass: Load paired & known devices immediately (<20ms)
+        # 2. Fast pass: Load paired & known devices in batch (<15ms)
         def _fetch_devices():
             devs = []
             conn_names = []
+            paired_macs = set()
+            conn_macs = set()
             try:
-                res_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True)
+                p_res = subprocess.run(["bluetoothctl", "devices", "Paired"], capture_output=True, text=True, timeout=0.8)
+                for line in p_res.stdout.splitlines():
+                    pts = line.split(" ", 2)
+                    if len(pts) >= 2 and pts[0] == "Device":
+                        paired_macs.add(pts[1])
+
+                c_res = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=0.8)
+                for line in c_res.stdout.splitlines():
+                    pts = line.split(" ", 2)
+                    if len(pts) >= 2 and pts[0] == "Device":
+                        conn_macs.add(pts[1])
+
+                res_devs = subprocess.run(["bluetoothctl", "devices"], capture_output=True, text=True, timeout=0.8)
                 for line in res_devs.stdout.splitlines():
                     parts = line.split(" ", 2)
                     if len(parts) >= 3 and parts[0] == "Device":
                         mac = parts[1]
                         name = parts[2].strip()
-                        info = self._get_device_info(mac, name)
+                        is_conn = mac in conn_macs
+                        is_paired = mac in paired_macs or is_conn
+                        info = {
+                            "mac": mac,
+                            "name": name,
+                            "icon": self._get_device_icon(name),
+                            "paired": is_paired,
+                            "connected": is_conn,
+                            "trusted": is_paired
+                        }
                         devs.append(info)
-                        if info["connected"]:
-                            conn_names.append(info["name"])
+                        if is_conn:
+                            conn_names.append(name)
             except Exception:
                 pass
             devs.sort(key=lambda d: (1 if d["connected"] else 0, 1 if d["paired"] else 0, d["name"].lower()), reverse=True)
@@ -362,50 +385,19 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
             except Exception:
                 pass
 
-    def _get_device_info(self, mac, name):
-        info = {
-            "mac": mac,
-            "name": name,
-            "icon": "bluetooth-active-symbolic",
-            "paired": False,
-            "connected": False,
-            "trusted": False
-        }
-        try:
-            res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
-            out = res.stdout
-            if "Connected: yes" in out:
-                info["connected"] = True
-            if "Paired: yes" in out:
-                info["paired"] = True
-            if "Trusted: yes" in out:
-                info["trusted"] = True
-
-            # Determine icon
-            icon_match = re.search(r"Icon:\s+(\S+)", out)
-            if icon_match:
-                ic = icon_match.group(1).lower()
-                if "audio" in ic or "headset" in ic or "headphone" in ic:
-                    info["icon"] = "audio-headset-symbolic"
-                elif "phone" in ic:
-                    info["icon"] = "phone-symbolic"
-                elif "mouse" in ic:
-                    info["icon"] = "input-mouse-symbolic"
-                elif "keyboard" in ic:
-                    info["icon"] = "input-keyboard-symbolic"
-                elif "computer" in ic:
-                    info["icon"] = "computer-symbolic"
-            elif any(w in name.lower() for w in ["airpods", "buds", "headphone", "headset", "speaker", "audio"]):
-                info["icon"] = "audio-headset-symbolic"
-            elif any(w in name.lower() for w in ["phone", "iphone", "redmi", "samsung"]):
-                info["icon"] = "phone-symbolic"
-            elif "mouse" in name.lower():
-                info["icon"] = "input-mouse-symbolic"
-            elif "keyboard" in name.lower():
-                info["icon"] = "input-keyboard-symbolic"
-        except Exception:
-            pass
-        return info
+    def _get_device_icon(self, name):
+        lower = name.lower()
+        if any(w in lower for w in ["airpods", "buds", "headphone", "headset", "speaker", "audio", "soundcore", "wh-", "wf-"]):
+            return "audio-headset-symbolic"
+        elif any(w in lower for w in ["phone", "iphone", "redmi", "samsung", "pixel", "android"]):
+            return "phone-symbolic"
+        elif "mouse" in lower:
+            return "input-mouse-symbolic"
+        elif "keyboard" in lower:
+            return "input-keyboard-symbolic"
+        elif any(w in lower for w in ["laptop", "desktop", "pc", "computer"]):
+            return "computer-symbolic"
+        return "bluetooth-active-symbolic"
 
     def _scan_complete(self, devices, connected_names):
         self.is_scanning = False
@@ -622,7 +614,7 @@ class BluetoothManagerApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="org.antigravity.bluetoothmanager",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.NON_UNIQUE
         )
         self.window = None
 

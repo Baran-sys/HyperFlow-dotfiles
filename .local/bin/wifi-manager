@@ -14,6 +14,7 @@ import gi
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+GLib.set_prgname("wifi-manager")
 
 CSS_STYLE = b"""
 * {
@@ -150,9 +151,8 @@ row:selected {
 
 class WifiManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(title="Wi-Fi Yöneticisi", application=app)
+        super().__init__(title="Wi-Fi Manager", application=app)
         self.set_default_size(380, 440)
-        self.set_position(Gtk.WindowPosition.CENTER)
 
         self.networks = []
         self.saved_connections = set()
@@ -1028,7 +1028,7 @@ class WifiManagerApp(Gtk.Application):
     def __init__(self):
         super().__init__(
             application_id="org.antigravity.wifimanager",
-            flags=Gio.ApplicationFlags.FLAGS_NONE
+            flags=Gio.ApplicationFlags.NON_UNIQUE
         )
         self.window = None
 

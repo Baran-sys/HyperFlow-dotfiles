@@ -9,8 +9,8 @@ def get_media_info():
         status_res = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=1)
         if status_res.returncode != 0:
             return {
-                "text": "  Medya",
-                "tooltip": "Medya oynatıcıyı açmak için tıklayın\n(Şu anda çalan medya yok)",
+                "text": "  Media",
+                "tooltip": "Click to open Media Player\n(No active playback)",
                 "class": "stopped"
             }
 
@@ -46,7 +46,7 @@ def get_media_info():
         elif title:
             display_text = title
         else:
-            display_text = "Bilinmeyen Parça"
+            display_text = "Unknown Track"
 
         # Truncate if long
         if len(display_text) > 26:
@@ -63,8 +63,8 @@ def get_media_info():
         }
     except Exception:
         return {
-            "text": "  Medya",
-            "tooltip": "Medya Oynatıcı",
+            "text": "  Media",
+            "tooltip": "Media Player",
             "class": "stopped"
         }
 
