@@ -41,6 +41,20 @@ REQUIRED_PACKAGES=(
     hypridle
     hyprlock
     hyprpaper
+    hyprpolkitagent
+    hyprpicker
+    dolphin
+    gnome-text-editor
+    cliphist
+    jq
+    libnotify
+    xdg-utils
+    xdg-user-dirs
+    power-profiles-daemon
+    kvantum
+    qt5ct
+    qt6ct
+    ttf-jetbrains-mono-nerd
     grim
     slurp
     wl-clipboard
@@ -48,8 +62,11 @@ REQUIRED_PACKAGES=(
     pamixer
     brightnessctl
     networkmanager
+    network-manager-applet
     bluez
     bluez-utils
+    blueman
+    pavucontrol
     python
     python-gobject
     gtk3
@@ -96,7 +113,7 @@ backup_configs() {
     echo -e "\n${BLUE}[2/5] Mevcut yapılandırmalar yedekleniyor...${NC}"
     mkdir -p "$BACKUP_DIR"
 
-    CONFIGS_TO_BACKUP=(hypr waybar assets dunst kitty tofi rofi wlogout gtk-3.0 xsettingsd)
+    CONFIGS_TO_BACKUP=(hypr waybar assets dunst kitty tofi rofi wlogout gtk-3.0 xsettingsd Kvantum qt5ct qt6ct kdeglobals mimeapps.list)
     for cfg in "${CONFIGS_TO_BACKUP[@]}"; do
         if [ -e "${HOME}/.config/${cfg}" ]; then
             cp -ra "${HOME}/.config/${cfg}" "${BACKUP_DIR}/"
@@ -108,18 +125,25 @@ backup_configs() {
 }
 
 # ------------------------------------------------------------------------------
-# 3. Copy Config Files
+# 3. Copy Config Files & Normalize User Paths
 # ------------------------------------------------------------------------------
 copy_dotfiles() {
     echo -e "\n${BLUE}[3/5] Yapılandırma dosyaları ~/.config dizinine kopyalanıyor...${NC}"
     mkdir -p "${HOME}/.config"
 
     cp -ra "${SCRIPT_DIR}/.config/"* "${HOME}/.config/"
+
+    # Normalize hardcoded user home paths if installing on another username
+    if [ "${HOME}" != "/home/bren" ]; then
+        find "${HOME}/.config/hypr" "${HOME}/.config/waybar" "${HOME}/.config/dunst" "${HOME}/.config/rofi" \
+            -type f -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
+    fi
+
     echo -e "${GREEN}✓ ~/.config dosyaları başarıyla yerleştirildi.${NC}"
 }
 
 # ------------------------------------------------------------------------------
-# 4. Copy Scripts, Libraries & Desktop Entries
+# 4. Copy Scripts, Libraries, Desktop Entries & Default MIME Associations
 # ------------------------------------------------------------------------------
 install_scripts_and_apps() {
     echo -e "\n${BLUE}[4/5] Özel appletler ve betikler ~/.local dizinine yükleniyor...${NC}"
@@ -130,6 +154,9 @@ install_scripts_and_apps() {
     # Copy scripts
     if [ -d "${SCRIPT_DIR}/.local/bin" ]; then
         cp -ra "${SCRIPT_DIR}/.local/bin/"* "${HOME}/.local/bin/"
+        if [ "${HOME}" != "/home/bren" ]; then
+            find "${HOME}/.local/bin" -maxdepth 1 -type f -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
+        fi
         chmod +x "${HOME}/.local/bin/"*
         echo -e "  ✓ Betikler ve appletler ~/.local/bin/ içine yüklendi (chmod +x uygulandı)."
     fi
@@ -140,14 +167,31 @@ install_scripts_and_apps() {
         echo -e "  ✓ Kütüphaneler ~/.local/lib/ içine yüklendi."
     fi
 
-    # Copy desktop applications
+    # Copy desktop applications (with NoDisplay=true on Waybar applets so Spotlight stays clean)
     if [ -d "${SCRIPT_DIR}/.local/share/applications" ]; then
         cp -ra "${SCRIPT_DIR}/.local/share/applications/"* "${HOME}/.local/share/applications/"
+        if [ "${HOME}" != "/home/bren" ]; then
+            find "${HOME}/.local/share/applications" -maxdepth 1 -name "*.desktop" -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
+        fi
         echo -e "  ✓ Masaüstü girişleri ~/.local/share/applications/ içine yüklendi."
         if command -v update-desktop-database &>/dev/null; then
             update-desktop-database "${HOME}/.local/share/applications" &>/dev/null || true
         fi
     fi
+
+    # Configure default MIME associations for text and empty files (fixes Firefox opening empty .txt files)
+    if command -v xdg-mime &>/dev/null; then
+        if [ -f "/usr/share/applications/org.gnome.TextEditor.desktop" ]; then
+            xdg-mime default org.gnome.TextEditor.desktop text/plain inode/x-empty application/x-zerosize 2>/dev/null || true
+        fi
+        if [ -f "/usr/share/applications/org.kde.dolphin.desktop" ]; then
+            xdg-mime default org.kde.dolphin.desktop inode/directory 2>/dev/null || true
+        fi
+        echo -e "  ✓ Varsayılan MIME dosya ilişkilendirmeleri (text/plain, inode/x-empty, inode/directory) yapılandırıldı."
+    fi
+
+    # Ensure Desktop folder exists
+    mkdir -p "${HOME}/Masaüstü" 2>/dev/null || true
 
     # Verify ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then

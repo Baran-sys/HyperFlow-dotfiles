@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Bluetooth Yöneticisi
+Comment=Bluetooth Cihazlarını Yönetin ve Bağlanın
+Exec=/home/bren/.local/bin/bluetooth-manager
+Icon=bluetooth
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Network;
+StartupWMClass=bluetooth-manager
+NoDisplay=true

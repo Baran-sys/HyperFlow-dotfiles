@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.insert(0, "/home/bren/.local/bin")
+sys.path.insert(0, os.path.expanduser("~/.local/bin"))
 from waybar_focus import SmartFocus, fast_toggle_or_lock
 fast_toggle_or_lock("wifi-manager")
 
@@ -352,9 +352,10 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         # 2. Fetch IP & Connected interface status
         ip_addr = ""
         current_conn = None
+        ifname = self.get_wifi_ifname()
         try:
             res_dev = subprocess.run(
-                ["nmcli", "-t", "-f", "GENERAL.CONNECTION,IP4.ADDRESS", "device", "show", "wlan0"],
+                ["nmcli", "-t", "-f", "GENERAL.CONNECTION,IP4.ADDRESS", "device", "show", ifname],
                 capture_output=True, text=True
             )
             for line in res_dev.stdout.splitlines():
@@ -524,7 +525,10 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         # Subtitle Row (Signal % • Band • Security)
         bands_str = "/".join(sorted(net["bands"]))
-        sec_str = net["security"] if net["security"] else "Açık Ağ"
+        if self.is_enterprise_network(net):
+            sec_str = f"{net['security']} (Kurumsal 802.1X)" if net["security"] else "Kurumsal 802.1X"
+        else:
+            sec_str = net["security"] if net["security"] else "Açık Ağ"
         detail_text = f"%{net['signal']}  •  {bands_str}  •  {sec_str}"
         lbl_details = Gtk.Label()
         lbl_details.set_markup(f"<small><span alpha='65%'>{GLib.markup_escape_text(detail_text)}</span></small>")
@@ -586,17 +590,195 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             return True
         return False
 
+    def get_wifi_ifname(self):
+        try:
+            res = subprocess.run(["nmcli", "-t", "-f", "DEVICE,TYPE", "device"], capture_output=True, text=True)
+            for line in res.stdout.splitlines():
+                if line.endswith(":wifi"):
+                    return line.split(":")[0]
+        except Exception:
+            pass
+        return "wlan0"
+
+    def is_enterprise_network(self, net):
+        sec = (net.get("security") or "").upper()
+        ssid = (net.get("ssid") or "").upper()
+        if "802.1X" in sec or "EAP" in sec or "ENTERPRISE" in sec:
+            return True
+        if any(k in ssid for k in ("EDUROAM", "KTUN", "OGRENCI", "PERSONEL")):
+            return True
+        return False
+
     def connect_network(self, net):
         ssid = net["ssid"]
         is_saved = ssid in self.saved_connections
         is_secure = bool(net["security"])
 
         if is_saved or not is_secure:
-            self._do_connect(ssid, None)
+            self._do_connect(ssid, None, net=net)
+        elif self.is_enterprise_network(net):
+            self.show_enterprise_dialog(net)
         else:
-            self.show_password_dialog(ssid)
+            self.show_password_dialog(ssid, net=net)
 
-    def show_password_dialog(self, ssid):
+    def show_enterprise_dialog(self, net):
+        ssid = net["ssid"]
+        is_ktun = any(k in ssid.upper() for k in ("KTUN", "EDUROAM", "OGRENCI"))
+
+        dialog = Gtk.Dialog(
+            title=f"Kurumsal Ağa Bağlan ({ssid})",
+            parent=self,
+            flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT
+        )
+        dialog.set_default_size(420, 320)
+        dialog.set_border_width(12)
+
+        content = dialog.get_content_area()
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        vbox.set_margin_top(4)
+        vbox.set_margin_bottom(6)
+        content.add(vbox)
+
+        lbl_head = Gtk.Label()
+        if is_ktun:
+            lbl_head.set_markup(
+                f"<b>{GLib.markup_escape_text(ssid)}</b> (802.1X / Kurumsal Wi-Fi)\n"
+                "<small><span alpha='75%'>KTÜN Öğrenci No veya E-posta ile giriş yapın (erisim.ktun.edu.tr şifreniz)</span></small>"
+            )
+        else:
+            lbl_head.set_markup(
+                f"<b>{GLib.markup_escape_text(ssid)}</b> (WPA-EAP / 802.1X Kurumsal Ağ)\n"
+                "<small><span alpha='75%'>Kurumsal kullanıcı adı ve parolanızı girin:</span></small>"
+            )
+        lbl_head.set_halign(Gtk.Align.START)
+        lbl_head.set_line_wrap(True)
+        vbox.pack_start(lbl_head, False, False, 0)
+
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(8)
+        vbox.pack_start(grid, False, False, 4)
+
+        # EAP Method
+        lbl_eap = Gtk.Label(label="EAP Yöntemi:")
+        lbl_eap.set_halign(Gtk.Align.START)
+        combo_eap = Gtk.ComboBoxText()
+        combo_eap.append("peap", "PEAP (Önerilen)")
+        combo_eap.append("ttls", "TTLS")
+        combo_eap.set_active_id("peap")
+        grid.attach(lbl_eap, 0, 0, 1, 1)
+        grid.attach(combo_eap, 1, 0, 1, 1)
+
+        # Phase 2 Auth
+        lbl_p2 = Gtk.Label(label="Faz 2 Doğrulama:")
+        lbl_p2.set_halign(Gtk.Align.START)
+        combo_p2 = Gtk.ComboBoxText()
+        combo_p2.append("mschapv2", "MSCHAPv2 (KTÜN / Eduroam)")
+        combo_p2.append("pap", "PAP")
+        combo_p2.append("gtc", "GTC")
+        combo_p2.set_active_id("mschapv2")
+        grid.attach(lbl_p2, 0, 1, 1, 1)
+        grid.attach(combo_p2, 1, 1, 1, 1)
+
+        # Identity / Student No
+        lbl_user = Gtk.Label(label="Öğrenci No / Kimlik:")
+        lbl_user.set_halign(Gtk.Align.START)
+        entry_user = Gtk.Entry()
+        entry_user.set_hexpand(True)
+        entry_user.set_placeholder_text("Örn: f21123456@ktun.edu.tr veya Öğrenci No")
+        grid.attach(lbl_user, 0, 2, 1, 1)
+        grid.attach(entry_user, 1, 2, 1, 1)
+
+        # Anonymous Identity
+        lbl_anon = Gtk.Label(label="Anonim Kimlik:")
+        lbl_anon.set_halign(Gtk.Align.START)
+        entry_anon = Gtk.Entry()
+        entry_anon.set_hexpand(True)
+        entry_anon.set_placeholder_text("İsteğe bağlı (boş bırakılabilir)")
+        grid.attach(lbl_anon, 0, 3, 1, 1)
+        grid.attach(entry_anon, 1, 3, 1, 1)
+
+        # Password
+        lbl_pass = Gtk.Label(label="Erişim Parolası:")
+        lbl_pass.set_halign(Gtk.Align.START)
+        entry_pass = Gtk.Entry()
+        entry_pass.set_hexpand(True)
+        entry_pass.set_visibility(False)
+        entry_pass.set_activates_default(True)
+        entry_pass.set_placeholder_text("İnternet / OBS erişim şifreniz")
+        grid.attach(lbl_pass, 0, 4, 1, 1)
+        grid.attach(entry_pass, 1, 4, 1, 1)
+
+        # CA Certificate option
+        chk_nocert = Gtk.CheckButton(label="CA Sertifikası Doğrulama (Sertifika kullanma - Önerilen)")
+        chk_nocert.set_active(True)
+        vbox.pack_start(chk_nocert, False, False, 0)
+
+        chk_show = Gtk.CheckButton(label="Parolayı Göster")
+        chk_show.connect("toggled", lambda c: entry_pass.set_visibility(c.get_active()))
+        vbox.pack_start(chk_show, False, False, 0)
+
+        dialog.add_button("İptal", Gtk.ResponseType.CANCEL)
+        btn_ok = dialog.add_button("Bağlan", Gtk.ResponseType.OK)
+        btn_ok.get_style_context().add_class("btn-connect")
+        dialog.set_default_response(Gtk.ResponseType.OK)
+
+        dialog.show_all()
+        self.is_showing_dialog = True
+        try:
+            response = dialog.run()
+            identity = entry_user.get_text().strip()
+            anon_id = entry_anon.get_text().strip()
+            password = entry_pass.get_text()
+            eap_method = combo_eap.get_active_id() or "peap"
+            phase2_auth = combo_p2.get_active_id() or "mschapv2"
+            no_ca_cert = chk_nocert.get_active()
+        finally:
+            dialog.destroy()
+            self.is_showing_dialog = False
+
+        if response == Gtk.ResponseType.OK and identity and password:
+            # If student typed only digits on KTUN network, auto-append @ktun.edu.tr if no @ present
+            if is_ktun and "@" not in identity and identity[0].isdigit():
+                identity = f"{identity}@ktun.edu.tr"
+            self._do_connect_enterprise(ssid, identity, password, eap_method, phase2_auth, anon_id, no_ca_cert)
+
+    def _do_connect_enterprise(self, ssid, identity, password, eap_method, phase2_auth, anon_id, no_ca_cert):
+        self.show_info(f"'{ssid}' kurumsal ağına bağlanılıyor...", Gtk.MessageType.INFO)
+        self.spinner.start()
+
+        def ent_thread():
+            ifname = self.get_wifi_ifname()
+            subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
+            cmd = [
+                "nmcli", "connection", "add",
+                "type", "wifi",
+                "con-name", ssid,
+                "ifname", ifname,
+                "ssid", ssid,
+                "wifi-sec.key-mgmt", "wpa-eap",
+                "802-1x.eap", eap_method,
+                "802-1x.phase2-auth", phase2_auth,
+                "802-1x.identity", identity,
+                "802-1x.password", password,
+                "802-1x.password-flags", "0",
+            ]
+            if anon_id:
+                cmd.extend(["802-1x.anonymous-identity", anon_id])
+            if no_ca_cert:
+                cmd.extend(["802-1x.system-ca-certs", "no"])
+
+            res_add = subprocess.run(cmd, capture_output=True, text=True)
+            if res_add.returncode != 0:
+                GLib.idle_add(self._on_connect_finished, ssid, res_add.returncode, res_add.stdout, res_add.stderr)
+                return
+
+            res_up = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
+            GLib.idle_add(self._on_connect_finished, ssid, res_up.returncode, res_up.stdout, res_up.stderr)
+
+        threading.Thread(target=ent_thread, daemon=True).start()
+
+    def show_password_dialog(self, ssid, net=None):
         dialog = Gtk.Dialog(
             title="Ağa Bağlan",
             parent=self,
@@ -634,28 +816,54 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         self.is_showing_dialog = True
         try:
             response = dialog.run()
-            password = entry.get_text().strip()
+            password = entry.get_text()
         finally:
             dialog.destroy()
             self.is_showing_dialog = False
 
         if response == Gtk.ResponseType.OK:
-            self._do_connect(ssid, password)
+            self._do_connect(ssid, password, net=net)
 
-    def _do_connect(self, ssid, password):
+    def _do_connect(self, ssid, password, net=None):
         self.show_info(f"'{ssid}' ağına bağlanılıyor...", Gtk.MessageType.INFO)
         self.spinner.start()
 
         def connect_thread():
+            ifname = self.get_wifi_ifname()
             if password:
-                cmd = ["nmcli", "device", "wifi", "connect", ssid, "password", password]
+                # Delete any stale profile first so WPA2/WPA3/SAE & PMF settings don't conflict (e.g. Samsung S23 Ultra Hotspot)
+                subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
+                cmd = ["nmcli", "--wait", "15", "device", "wifi", "connect", ssid, "password", password, "ifname", ifname]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+
+                if res.returncode != 0:
+                    # Fallback: explicit profile creation with PMF optional (1) for WPA2/WPA3 transitional mobile hotspots
+                    subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
+                    sec_str = (net.get("security", "") if net else "").upper()
+                    key_mgmt = "sae" if ("WPA3" in sec_str and "WPA2" not in sec_str) else "wpa-psk"
+                    add_cmd = [
+                        "nmcli", "connection", "add",
+                        "type", "wifi",
+                        "con-name", ssid,
+                        "ifname", ifname,
+                        "ssid", ssid,
+                        "wifi-sec.key-mgmt", key_mgmt,
+                        "wifi-sec.psk", password,
+                        "wifi-sec.pmf", "1",
+                    ]
+                    res_add = subprocess.run(add_cmd, capture_output=True, text=True)
+                    if res_add.returncode == 0:
+                        res = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
+                        if res.returncode != 0 and key_mgmt == "wpa-psk" and "WPA3" in sec_str:
+                            subprocess.run(["nmcli", "connection", "modify", "id", ssid, "wifi-sec.key-mgmt", "sae"], capture_output=True)
+                            res = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
             else:
                 if ssid in self.saved_connections:
-                    cmd = ["nmcli", "connection", "up", "id", ssid]
+                    cmd = ["nmcli", "--wait", "15", "connection", "up", "id", ssid]
                 else:
-                    cmd = ["nmcli", "device", "wifi", "connect", ssid]
+                    cmd = ["nmcli", "--wait", "15", "device", "wifi", "connect", ssid, "ifname", ifname]
+                res = subprocess.run(cmd, capture_output=True, text=True)
 
-            res = subprocess.run(cmd, capture_output=True, text=True)
             GLib.idle_add(self._on_connect_finished, ssid, res.returncode, res.stdout, res.stderr)
 
         threading.Thread(target=connect_thread, daemon=True).start()
@@ -674,7 +882,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
     def disconnect_network(self):
         self.show_info("Bağlantı kesiliyor...", Gtk.MessageType.INFO)
         def disc_thread():
-            subprocess.run(["nmcli", "device", "disconnect", "wlan0"], capture_output=True)
+            subprocess.run(["nmcli", "device", "disconnect", self.get_wifi_ifname()], capture_output=True)
             GLib.idle_add(lambda: self.start_scan(rescan=False))
         threading.Thread(target=disc_thread, daemon=True).start()
 

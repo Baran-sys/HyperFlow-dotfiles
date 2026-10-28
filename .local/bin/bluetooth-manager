@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.insert(0, "/home/bren/.local/bin")
+sys.path.insert(0, os.path.expanduser("~/.local/bin"))
 from waybar_focus import SmartFocus, fast_toggle_or_lock
 fast_toggle_or_lock("bluetooth-manager")
 
@@ -542,26 +542,57 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.show_info(f"Cihaza bağlanılıyor ({mac})...", Gtk.MessageType.INFO)
         self.spinner.start()
         def t():
-            subprocess.run(["bluetoothctl", "trust", mac], capture_output=True)
-            res = subprocess.run(["bluetoothctl", "connect", mac], capture_output=True, text=True)
-            GLib.idle_add(self._on_action_finished, "Bağlandı" if res.returncode == 0 else f"Bağlantı hatası: {res.stdout.strip() or res.stderr.strip()}")
+            try:
+                subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
+                subprocess.run(["bluetoothctl", "power", "on"], capture_output=True)
+                subprocess.run(["bluetoothctl", "trust", mac], capture_output=True)
+
+                connected = False
+                last_err = ""
+                for attempt in range(3):
+                    res = subprocess.run(["bluetoothctl", "--timeout", "8", "connect", mac], capture_output=True, text=True)
+                    out = (res.stdout or "") + "\n" + (res.stderr or "")
+                    info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+                    if "Connected: yes" in info_res.stdout or "Connection successful" in out:
+                        connected = True
+                        break
+                    last_err = out.strip().splitlines()[-1] if out.strip() else "Cihaz yanıt vermedi"
+                    # Wake up / rediscover sleeping or advertisement-idle device before next attempt
+                    subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
+                    time.sleep(0.4)
+
+                if connected:
+                    GLib.idle_add(self._on_action_finished, "Bağlandı", Gtk.MessageType.INFO)
+                else:
+                    GLib.idle_add(self._on_action_finished, f"Bağlantı hatası: {last_err}", Gtk.MessageType.ERROR)
+            except Exception as e:
+                GLib.idle_add(self._on_action_finished, f"Bağlantı hatası: {e}", Gtk.MessageType.ERROR)
         threading.Thread(target=t, daemon=True).start()
 
     def disconnect_device(self, mac):
         self.show_info("Bağlantı kesiliyor...", Gtk.MessageType.INFO)
         def t():
             subprocess.run(["bluetoothctl", "disconnect", mac], capture_output=True)
-            GLib.idle_add(self._on_action_finished, "Bağlantı kesildi")
+            GLib.idle_add(self._on_action_finished, "Bağlantı kesildi", Gtk.MessageType.INFO)
         threading.Thread(target=t, daemon=True).start()
 
     def pair_and_connect(self, mac):
         self.show_info(f"Eşleşme başlatılıyor ({mac})...", Gtk.MessageType.INFO)
         self.spinner.start()
         def t():
-            subprocess.run(["bluetoothctl", "pair", mac], capture_output=True)
+            subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
+            subprocess.run(["bluetoothctl", "power", "on"], capture_output=True)
+            subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
+            subprocess.run(["bluetoothctl", "--timeout", "10", "pair", mac], capture_output=True)
             subprocess.run(["bluetoothctl", "trust", mac], capture_output=True)
-            res = subprocess.run(["bluetoothctl", "connect", mac], capture_output=True, text=True)
-            GLib.idle_add(self._on_action_finished, "Eşleşti ve bağlandı!" if res.returncode == 0 else "Eşleşme tamamlandı")
+            res = subprocess.run(["bluetoothctl", "--timeout", "8", "connect", mac], capture_output=True, text=True)
+            info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+            ok = ("Connected: yes" in info_res.stdout) or (res.returncode == 0)
+            GLib.idle_add(
+                self._on_action_finished,
+                "Eşleşti ve bağlandı!" if ok else "Eşleşme tamamlandı (bağlantı kurulamadı)",
+                Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING
+            )
         threading.Thread(target=t, daemon=True).start()
 
     def remove_device(self, mac):
@@ -570,9 +601,9 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
             GLib.idle_add(lambda: self.start_scan(rescan=False))
         threading.Thread(target=t, daemon=True).start()
 
-    def _on_action_finished(self, msg):
+    def _on_action_finished(self, msg, msg_type=Gtk.MessageType.INFO):
         self.spinner.stop()
-        self.show_info(msg, Gtk.MessageType.INFO)
+        self.show_info(msg, msg_type)
         self.start_scan(rescan=False)
 
     def on_search_changed(self, entry):

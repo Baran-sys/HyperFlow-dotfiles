@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Ses Karıştırıcı
+Comment=Ses Seviyesi ve Çıkış Aygıtı Denetimi
+Exec=/home/bren/.local/bin/audio-mixer
+Icon=multimedia-volume-control
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Mixer;
+StartupWMClass=audio-mixer
+NoDisplay=true

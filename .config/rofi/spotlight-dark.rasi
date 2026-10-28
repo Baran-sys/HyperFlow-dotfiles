@@ -69,7 +69,7 @@ prompt {
 entry {
     background-color: transparent;
     text-color: @fg-col;
-    placeholder: "Spotlight Araması...";
+    placeholder: "Spotlight Araması... (Alt+H: Gizle)";
     placeholder-color: @grey;
     cursor: text;
     font: "JetBrainsMono Nerd Font 14";

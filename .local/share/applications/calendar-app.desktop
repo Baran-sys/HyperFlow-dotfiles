@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Takvim
+Comment=Takvim ve Dijital Saat
+Exec=/home/bren/.local/bin/calendar-app
+Icon=office-calendar
+Terminal=false
+Type=Application
+Categories=Utility;Clock;
+StartupWMClass=calendar-app
+NoDisplay=true

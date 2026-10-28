@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Medya Oynatıcı
+Comment=Medya Oynatıcı ve Müzik Kontrolcüsü
+Exec=/home/bren/.local/bin/media-player
+Icon=multimedia-player
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;
+StartupWMClass=media-player
+NoDisplay=true

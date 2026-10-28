@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.insert(0, '/home/bren/.local/bin')
+sys.path.insert(0, os.path.expanduser('~/.local/bin'))
 from waybar_focus import SmartFocus, fast_toggle_or_lock
 fast_toggle_or_lock('calendar-app')
 

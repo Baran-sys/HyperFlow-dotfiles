@@ -1,9 +1,189 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# Spotlight Menu & Application Visibility Manager (Rofi)
+# - Normal açılış: rofi -show drun (Alt+H: Uygulama Gizleme / Gösterme Yöneticisi)
+# - Argümanlar:
+#   --manage : Uygulama Gizleme / Gösterme Yöneticisini doğrudan açar
+#   --hide <Name> : İsmi verilen uygulamayı gizler
+# ==============================================================================
+
+LOCAL_APPS="$HOME/.local/share/applications"
+mkdir -p "$LOCAL_APPS"
+
+APPLETS=(
+    "audio-mixer.desktop"
+    "bluetooth-manager.desktop"
+    "calendar-app.desktop"
+    "media-player.desktop"
+    "task-manager.desktop"
+    "wifi-manager.desktop"
+    "power-menu.desktop"
+    "power-session.desktop"
+)
+
+is_applet() {
+    local base="$1"
+    for a in "${APPLETS[@]}"; do
+        [[ "$base" == "$a" ]] && return 0
+    done
+    return 1
+}
+
+ensure_applets_hidden() {
+    for a in "${APPLETS[@]}"; do
+        local f="$LOCAL_APPS/$a"
+        if [ -f "$f" ] && ! grep -q "^NoDisplay=true" "$f" 2>/dev/null; then
+            echo "NoDisplay=true" >> "$f"
+        fi
+    done
+}
+
+hide_or_toggle_desktop_file() {
+    local src_file="$1"
+    local force_state="$2" # "true" | "false" | "toggle"
+    local base
+    base="$(basename "$src_file")"
+    local target="$LOCAL_APPS/$base"
+
+    if [ "$src_file" != "$target" ] && [ ! -f "$target" ]; then
+        cp "$src_file" "$target"
+    fi
+
+    local cur_hidden="false"
+    if grep -q "^NoDisplay=true" "$target" 2>/dev/null; then
+        cur_hidden="true"
+    fi
+
+    local new_state="$force_state"
+    if [ "$force_state" = "toggle" ]; then
+        if [ "$cur_hidden" = "true" ]; then
+            new_state="false"
+        else
+            new_state="true"
+        fi
+    fi
+
+    if grep -q "^NoDisplay=" "$target" 2>/dev/null; then
+        sed -i "s/^NoDisplay=.*/NoDisplay=$new_state/" "$target"
+    else
+        echo "NoDisplay=$new_state" >> "$target"
+    fi
+
+    local app_name
+    app_name=$(grep -m1 "^Name=" "$target" | cut -d= -f2-)
+    if [ "$new_state" = "true" ]; then
+        notify-send -a "Spotlight" -t 2000 "Uygulama Gizlendi" "'${app_name:-$base}' artık Spotlight'ta görünmeyecek."
+    else
+        notify-send -a "Spotlight" -t 2000 "Uygulama Gösterildi" "'${app_name:-$base}' tekrar Spotlight'a eklendi."
+    fi
+    update-desktop-database "$LOCAL_APPS" 2>/dev/null || true
+}
+
+manage_hidden_apps() {
+    python3 - << 'PYEOF'
+import os
+import glob
+import subprocess
+from pathlib import Path
+
+local_dir = Path.home() / ".local/share/applications"
+sys_dirs = [
+    local_dir,
+    Path.home() / ".local/share/flatpak/exports/share/applications",
+    Path("/var/lib/flatpak/exports/share/applications"),
+    Path("/usr/local/share/applications"),
+    Path("/usr/share/applications"),
+]
+
+applets = {
+    "audio-mixer.desktop", "bluetooth-manager.desktop", "calendar-app.desktop",
+    "media-player.desktop", "task-manager.desktop", "wifi-manager.desktop",
+    "power-menu.desktop", "power-session.desktop", "spotlight-manager.desktop"
+}
+
+apps = {}
+for d in sys_dirs:
+    if not d.exists():
+        continue
+    for f in sorted(d.glob("*.desktop")):
+        if f.name in applets or f.name in apps:
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        if "[Desktop Entry]" not in text:
+            continue
+        name = None
+        nodisplay = False
+        hidden = False
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("[") and line != "[Desktop Entry]":
+                break
+            if line.startswith("Name=") and not name:
+                name = line.split("=", 1)[1].strip()
+            elif line.startswith("NoDisplay="):
+                nodisplay = line.split("=", 1)[1].strip().lower() == "true"
+            elif line.startswith("Hidden="):
+                hidden = line.split("=", 1)[1].strip().lower() == "true"
+        if hidden or not name:
+            continue
+        # Ignore system-internal helpers that have NoDisplay=true only in /usr/share
+        if nodisplay and f.parent != local_dir:
+            continue
+        apps[f.name] = (name, nodisplay, str(f))
+
+items = sorted(apps.items(), key=lambda x: (not x[1][1], x[1][0].lower()))
+menu_lines = []
+lookup = {}
+for fname, (name, is_hid, fpath) in items:
+    status = "󰈉  [Gizli]" if is_hid else "󰈈  [Görünür]"
+    label = f"{status}  {name}  ({fname})"
+    menu_lines.append(label)
+    lookup[label] = fpath
+
+if not menu_lines:
+    raise SystemExit(0)
+
+proc = subprocess.run(
+    ["rofi", "-dmenu", "-i", "-p", "󰈈 ", "-mesg", "Gizlemek veya tekrar göstermek istediğiniz uygulamayı seçin (Enter):", "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")],
+    input="\n".join(menu_lines),
+    text=True,
+    capture_output=True
+)
+choice = proc.stdout.strip()
+if proc.returncode == 0 and choice in lookup:
+    subprocess.run([os.path.expanduser("~/.local/bin/spotlight-menu"), "--toggle-file", lookup[choice]])
+PYEOF
+}
+
+ensure_applets_hidden
+
+case "${1:-}" in
+    --manage)
+        manage_hidden_apps
+        exit 0
+        ;;
+    --toggle-file)
+        if [ -n "${2:-}" ] && [ -f "${2:-}" ]; then
+            hide_or_toggle_desktop_file "$2" "toggle"
+        fi
+        exit 0
+        ;;
+esac
 
 # Toggle: If rofi is already open, close it
 if pkill -x rofi; then
     exit 0
 fi
 
-# Run spotlight rofi
-rofi -show drun -theme ~/.config/rofi/spotlight.rasi
+# Run spotlight rofi (Alt+H opens the Hide/Unhide Manager)
+rofi -show drun \
+    -kb-custom-1 "Alt+h" \
+    -theme ~/.config/rofi/spotlight.rasi
+rofi_exit=$?
+
+if [ $rofi_exit -eq 10 ]; then
+    manage_hidden_apps
+fi

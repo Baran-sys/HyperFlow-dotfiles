@@ -15,7 +15,19 @@ gi.require_version('GtkLayerShell', '0.1')
 from gi.repository import Gtk, Gdk, Gio, GLib, Pango, PangoCairo, GdkPixbuf, GtkLayerShell
 import cairo
 
-DESKTOP_DIR = Path.home() / "Masaüstü"
+def resolve_desktop_dir() -> Path:
+    try:
+        out = subprocess.check_output(["xdg-user-dir", "DESKTOP"], text=True, timeout=0.5).strip()
+        if out and Path(out).exists():
+            return Path(out)
+    except Exception:
+        pass
+    for candidate in (Path.home() / "Masaüstü", Path.home() / "Desktop"):
+        if candidate.exists():
+            return candidate
+    return Path.home() / "Masaüstü"
+
+DESKTOP_DIR = resolve_desktop_dir()
 TRASH_FILES_DIR = Path.home() / ".local/share/Trash/files"
 TRASH_INFO_DIR = Path.home() / ".local/share/Trash/info"
 POSITIONS_FILE = Path.home() / ".config/desktop-icons-positions.json"
@@ -204,6 +216,7 @@ class DesktopManager(Gtk.Window):
         self.is_dragging_icon = False
         self.drop_target_folder = None
         self.anim_timer_id = None
+        self.external_dnd_active = False
 
         # Rubberband selection state
         self.rubberband_active = False
@@ -235,6 +248,7 @@ class DesktopManager(Gtk.Window):
         self.modal_subtitle = ""
         self.modal_text = ""
         self.modal_cursor = 0
+        self.modal_scroll_x = 0.0
         self.modal_select_all = False
         self.modal_callback = None
         self.modal_hover_btn = None
@@ -252,9 +266,15 @@ class DesktopManager(Gtk.Window):
             | Gdk.EventMask.LEAVE_NOTIFY_MASK
         )
 
-        targets = [Gtk.TargetEntry.new("text/uri-list", 0, 0)]
-        self.darea.drag_dest_set(Gtk.DestDefaults.ALL, targets, Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+        self.dnd_targets = [
+            Gtk.TargetEntry.new("text/uri-list", 0, 0),
+            Gtk.TargetEntry.new("text/plain", 0, 1),
+        ]
+        self.darea.drag_dest_set(Gtk.DestDefaults.ALL, self.dnd_targets, Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
         self.darea.connect("drag-data-received", self.on_drag_data_received)
+        self.darea.connect("drag-data-get", self.on_drag_data_get)
+        self.darea.connect("drag-end", self.on_drag_end)
+        self.darea.connect("leave-notify-event", self.on_leave_notify)
 
         self.darea.connect("draw", self.on_draw)
         self.darea.connect("button-press-event", self.on_button_press)
@@ -758,12 +778,16 @@ class DesktopManager(Gtk.Window):
 
         title_layout = self.darea.create_pango_layout(self.modal_title)
         title_layout.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font Bold 11"))
+        title_layout.set_width((mw - 40) * Pango.SCALE)
+        title_layout.set_ellipsize(Pango.EllipsizeMode.END)
         cr.set_source_rgba(0.804, 0.839, 0.957, p)
         cr.move_to(mx + 20, my + 18)
         PangoCairo.show_layout(cr, title_layout)
 
         sub_layout = self.darea.create_pango_layout(self.modal_subtitle)
         sub_layout.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font 9"))
+        sub_layout.set_width((mw - 40) * Pango.SCALE)
+        sub_layout.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
         cr.set_source_rgba(0.651, 0.678, 0.784, p)
         cr.move_to(mx + 20, my + 42)
         PangoCairo.show_layout(cr, sub_layout)
@@ -780,26 +804,48 @@ class DesktopManager(Gtk.Window):
         txt_layout.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font 10"))
         _, logical_rect = txt_layout.get_pixel_extents()
 
+        sub_str = self.modal_text[:self.modal_cursor]
+        c_layout = self.darea.create_pango_layout(sub_str)
+        c_layout.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font 10"))
+        _, c_rect = c_layout.get_pixel_extents()
+
+        inner_w = ew - 22.0
+        cursor_px = float(c_rect.width)
+        if self.modal_select_all:
+            self.modal_scroll_x = max(0.0, float(logical_rect.width) - inner_w)
+        else:
+            if cursor_px - self.modal_scroll_x > inner_w:
+                self.modal_scroll_x = cursor_px - inner_w
+            elif cursor_px - self.modal_scroll_x < 0:
+                self.modal_scroll_x = cursor_px
+            max_scroll = max(0.0, float(logical_rect.width) - inner_w)
+            if self.modal_scroll_x > max_scroll:
+                self.modal_scroll_x = max_scroll
+
+        cr.save()
+        self._rounded_rect(cr, ex + 4, ey + 2, ew - 8, eh - 4, 6)
+        cr.clip()
+
+        text_draw_x = ex + 11 - self.modal_scroll_x
+
         if self.modal_select_all and self.modal_text:
-            self._rounded_rect(cr, ex + 9, ey + 7, max(8, logical_rect.width + 4), eh - 14, 4)
+            self._rounded_rect(cr, text_draw_x - 2, ey + 7, max(8, logical_rect.width + 4), eh - 14, 4)
             cr.set_source_rgba(0.796, 0.651, 0.969, 0.35 * p)
             cr.fill()
 
         cr.set_source_rgba(0.804, 0.839, 0.957, p)
-        cr.move_to(ex + 11, ey + 9)
+        cr.move_to(text_draw_x, ey + 9)
         PangoCairo.show_layout(cr, txt_layout)
 
         if not self.modal_select_all:
-            sub_str = self.modal_text[:self.modal_cursor]
-            c_layout = self.darea.create_pango_layout(sub_str)
-            c_layout.set_font_description(Pango.FontDescription("JetBrainsMono Nerd Font 10"))
-            _, c_rect = c_layout.get_pixel_extents()
-            cx_pos = ex + 11 + c_rect.width
+            cx_pos = text_draw_x + cursor_px
             cr.set_source_rgba(0.796, 0.651, 0.969, p)
             cr.set_line_width(1.5)
             cr.move_to(cx_pos, ey + 8)
             cr.line_to(cx_pos, ey + eh - 8)
             cr.stroke()
+
+        cr.restore()
 
         bw, bh = 88, 30
         by = my + mh - 44
@@ -842,11 +888,89 @@ class DesktopManager(Gtk.Window):
         self.modal_subtitle = subtitle
         self.modal_text = default_text
         self.modal_cursor = len(default_text)
+        self.modal_scroll_x = 0.0
         self.modal_select_all = True
         self.modal_callback = callback
         self.modal_hover_btn = None
         GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
         self.darea.grab_focus()
+        self.ensure_animation_loop()
+
+    def _word_boundary_left(self, text: str, idx: int) -> int:
+        i = max(0, idx)
+        while i > 0 and not text[i - 1].isalnum():
+            i -= 1
+        while i > 0 and text[i - 1].isalnum():
+            i -= 1
+        return i
+
+    def _word_boundary_right(self, text: str, idx: int) -> int:
+        n = len(text)
+        i = min(n, idx)
+        while i < n and not text[i].isalnum():
+            i += 1
+        while i < n and text[i].isalnum():
+            i += 1
+        return i
+
+    def _dismiss_applets(self):
+        try:
+            lock_dir = "/tmp/waybar_applets"
+            if os.path.exists(lock_dir):
+                import signal
+                for fname in os.listdir(lock_dir):
+                    if fname.endswith(".pid"):
+                        fpath = os.path.join(lock_dir, fname)
+                        try:
+                            with open(fpath, "r") as f:
+                                pid = int(f.read().strip())
+                            os.kill(pid, signal.SIGTERM)
+                        except Exception:
+                            pass
+                        try:
+                            os.remove(fpath)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    def start_external_drag(self, event=None):
+        if self.external_dnd_active or not self.dragging_items:
+            return
+        self.external_dnd_active = True
+        target_list = Gtk.TargetList.new(self.dnd_targets)
+        ctx = self.darea.drag_begin_with_coordinates(
+            target_list,
+            Gdk.DragAction.COPY | Gdk.DragAction.MOVE,
+            1,
+            event,
+            -1,
+            -1,
+        )
+        if ctx and self.primary_drag_item and self.primary_drag_item.pixbuf:
+            Gtk.drag_set_icon_pixbuf(ctx, self.primary_drag_item.pixbuf, ICON_SIZE // 2, ICON_SIZE // 2)
+
+    def on_leave_notify(self, widget, event):
+        if self.is_dragging_icon and self.dragging_items and not self.external_dnd_active:
+            self.start_external_drag(event)
+        return False
+
+    def on_drag_data_get(self, widget, drag_context, data, info, time):
+        uris = [it.path.resolve().as_uri() for it in self.dragging_items if it.path.exists()]
+        if info == 0:
+            data.set_uris(uris)
+        else:
+            data.set_text("\r\n".join(uris) + "\r\n", -1)
+
+    def on_drag_end(self, widget, drag_context):
+        self.external_dnd_active = False
+        for it in self.dragging_items:
+            it.target_scale = 1.0
+            it.update_target_pos(snap_immediately=False)
+        self.drop_target_folder = None
+        self.dragging_items.clear()
+        self.primary_drag_item = None
+        self.is_dragging_icon = False
         self.ensure_animation_loop()
 
     def close_modal(self, confirm=False):
@@ -876,6 +1000,7 @@ class DesktopManager(Gtk.Window):
         cr.close_path()
 
     def on_button_press(self, widget, event):
+        self._dismiss_applets()
         self.darea.grab_focus()
 
         if self.modal_active:
@@ -1024,6 +1149,8 @@ class DesktopManager(Gtk.Window):
             return True
 
         if self.primary_drag_item and self.dragging_items:
+            if self.external_dnd_active:
+                return True
             if not self.is_dragging_icon and math.hypot(event.x - self.drag_start_x, event.y - self.drag_start_y) > 4:
                 self.is_dragging_icon = True
                 for it in self.dragging_items:
@@ -1031,6 +1158,13 @@ class DesktopManager(Gtk.Window):
                 self.ensure_animation_loop()
 
             if self.is_dragging_icon:
+                alloc = self.get_allocation()
+                sw = alloc.width if alloc.width > 200 else 1536
+                sh = alloc.height if alloc.height > 200 else 824
+                if event.x <= 18 or event.y <= 18 or event.x >= sw - 18 or event.y >= sh - 18:
+                    self.start_external_drag(event)
+                    return True
+
                 self.drag_curr_x = event.x
                 self.drag_curr_y = event.y
                 for it in self.dragging_items:
@@ -1179,8 +1313,13 @@ class DesktopManager(Gtk.Window):
                     self.modal_cursor = 0
                     self.modal_select_all = False
                 elif self.modal_cursor > 0:
-                    self.modal_text = self.modal_text[:self.modal_cursor - 1] + self.modal_text[self.modal_cursor:]
-                    self.modal_cursor -= 1
+                    if ctrl:
+                        new_c = self._word_boundary_left(self.modal_text, self.modal_cursor)
+                        self.modal_text = self.modal_text[:new_c] + self.modal_text[self.modal_cursor:]
+                        self.modal_cursor = new_c
+                    else:
+                        self.modal_text = self.modal_text[:self.modal_cursor - 1] + self.modal_text[self.modal_cursor:]
+                        self.modal_cursor -= 1
                 self.darea.queue_draw()
             elif key == Gdk.KEY_Delete:
                 if self.modal_select_all:
@@ -1188,22 +1327,44 @@ class DesktopManager(Gtk.Window):
                     self.modal_cursor = 0
                     self.modal_select_all = False
                 elif self.modal_cursor < len(self.modal_text):
-                    self.modal_text = self.modal_text[:self.modal_cursor] + self.modal_text[self.modal_cursor + 1:]
+                    if ctrl:
+                        new_c = self._word_boundary_right(self.modal_text, self.modal_cursor)
+                        self.modal_text = self.modal_text[:self.modal_cursor] + self.modal_text[new_c:]
+                    else:
+                        self.modal_text = self.modal_text[:self.modal_cursor] + self.modal_text[self.modal_cursor + 1:]
                 self.darea.queue_draw()
-            elif key == Gdk.KEY_Left:
-                self.modal_select_all = False
-                self.modal_cursor = max(0, self.modal_cursor - 1)
+            elif key in (Gdk.KEY_Left, Gdk.KEY_KP_Left):
+                if self.modal_select_all:
+                    self.modal_select_all = False
+                    self.modal_cursor = 0
+                elif ctrl:
+                    self.modal_cursor = self._word_boundary_left(self.modal_text, self.modal_cursor)
+                else:
+                    self.modal_cursor = max(0, self.modal_cursor - 1)
                 self.darea.queue_draw()
-            elif key == Gdk.KEY_Right:
+            elif key in (Gdk.KEY_Right, Gdk.KEY_KP_Right):
+                if self.modal_select_all:
+                    self.modal_select_all = False
+                    self.modal_cursor = len(self.modal_text)
+                elif ctrl:
+                    self.modal_cursor = self._word_boundary_right(self.modal_text, self.modal_cursor)
+                else:
+                    self.modal_cursor = min(len(self.modal_text), self.modal_cursor + 1)
+                self.darea.queue_draw()
+            elif key in (Gdk.KEY_Home, Gdk.KEY_KP_Home):
                 self.modal_select_all = False
-                self.modal_cursor = min(len(self.modal_text), self.modal_cursor + 1)
+                self.modal_cursor = 0
+                self.darea.queue_draw()
+            elif key in (Gdk.KEY_End, Gdk.KEY_KP_End):
+                self.modal_select_all = False
+                self.modal_cursor = len(self.modal_text)
                 self.darea.queue_draw()
             elif ctrl and key in (Gdk.KEY_a, Gdk.KEY_A):
                 self.modal_select_all = True
                 self.darea.queue_draw()
             else:
                 uni = Gdk.keyval_to_unicode(key)
-                if uni and chr(uni).isprintable() and chr(uni) not in ('/', '\0'):
+                if uni and chr(uni).isprintable() and chr(uni) not in ('/', '\0') and not ctrl:
                     ch = chr(uni)
                     if self.modal_select_all:
                         self.modal_text = ch
@@ -1269,7 +1430,7 @@ class DesktopManager(Gtk.Window):
         if item.path.is_dir():
             entries.append({"label": "  Burada Terminal Aç", "cb": lambda: subprocess.Popen(["kitty", "--directory", str(item.path)])})
         else:
-            entries.append({"label": "󰨞  Düzenleyicide Aç", "cb": lambda: subprocess.Popen(["code", str(item.path)])})
+            entries.append({"label": "󰨞  Düzenleyicide Aç", "cb": lambda: self.open_in_editor(item.path)})
 
         entries.extend([
             {"type": "sep"},
@@ -1282,14 +1443,61 @@ class DesktopManager(Gtk.Window):
         ])
         self.open_context_menu(event.x, event.y, entries, folder_item=item if item.path.is_dir() else None)
 
+    def open_in_editor(self, path: Path):
+        for editor in ("gnome-text-editor", "antigravity-ide", "code", "kate", "kwrite", "mousepad", "subl"):
+            if shutil.which(editor):
+                subprocess.Popen([editor, str(path)])
+                return
+        subprocess.Popen(["kitty", "-e", os.environ.get("EDITOR", "nano"), str(path)])
+
     def open_item(self, item: DesktopItem):
         if item.is_desktop_file and item.exec_cmd:
             cmd = item.exec_cmd.split("%")[0].strip()
             subprocess.Popen(cmd, shell=True, cwd=str(DESKTOP_DIR))
-        elif item.path.is_dir():
+            return
+        if item.path.is_dir():
             subprocess.Popen(["dolphin", str(item.path)])
-        else:
-            subprocess.Popen(["xdg-open", str(item.path)])
+            return
+
+        TEXT_EXTS = {
+            ".txt", ".md", ".log", ".json", ".jsonc", ".yaml", ".yml", ".toml",
+            ".ini", ".conf", ".cfg", ".sh", ".bash", ".zsh", ".py", ".js", ".ts",
+            ".css", ".xml", ".csv", ".sql", ".c", ".cpp", ".h", ".rs", ".go", ".java"
+        }
+        try:
+            is_empty = item.path.is_file() and item.path.stat().st_size == 0
+        except Exception:
+            is_empty = False
+
+        if item.path.suffix.lower() in TEXT_EXTS or is_empty:
+            app_info = Gio.AppInfo.get_default_for_type("text/plain", False)
+            if app_info:
+                try:
+                    gfile = Gio.File.new_for_path(str(item.path))
+                    app_info.launch([gfile], None)
+                    return
+                except Exception:
+                    pass
+            self.open_in_editor(item.path)
+            return
+
+        try:
+            gfile = Gio.File.new_for_path(str(item.path))
+            info = gfile.query_info("standard::content-type", Gio.FileQueryInfoFlags.NONE, None)
+            content_type = info.get_content_type()
+            if content_type in ("application/x-zerosize", "inode/x-empty"):
+                content_type = "text/plain"
+            if content_type:
+                app_info = Gio.AppInfo.get_default_for_type(content_type, False)
+                if app_info:
+                    app_info.launch([gfile], None)
+                    return
+            if Gio.AppInfo.launch_default_for_uri(gfile.get_uri(), None):
+                return
+        except Exception:
+            pass
+
+        subprocess.Popen(["xdg-open", str(item.path)])
 
     def unique_path(self, base_path: Path) -> Path:
         if not base_path.exists():

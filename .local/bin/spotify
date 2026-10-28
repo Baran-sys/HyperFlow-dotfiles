@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-export LD_PRELOAD="/home/bren/.local/lib/libspotify-notray.so${LD_PRELOAD:+:$LD_PRELOAD}"
+export LD_PRELOAD="$HOME/.local/lib/libspotify-notray.so${LD_PRELOAD:+:$LD_PRELOAD}"
 exec /usr/bin/spotify --password-store=basic "$@"

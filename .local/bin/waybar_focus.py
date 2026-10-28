@@ -21,9 +21,10 @@ _THEME_CSS_CACHE = {}
 
 def fast_toggle_or_lock(app_name):
     """
-    Lightning-fast toggle check:
-    If app is already running, send SIGTERM and exit immediately (<0.1ms).
-    Otherwise, register current PID and return.
+    Lightning-fast toggle & mutual exclusion check:
+    1. If this app is already running, send SIGTERM and exit immediately (<0.1ms).
+    2. If any other Waybar applet is open, terminate it so only one applet is open at a time.
+    3. Register current PID and return.
     """
     my_pid = os.getpid()
     lock_file = os.path.join(LOCK_DIR, f"{app_name}.pid")
@@ -50,6 +51,28 @@ def fast_toggle_or_lock(app_name):
                             pass
         except Exception:
             pass
+
+    # Close any OTHER running Waybar applets so only one applet is open at a time
+    try:
+        if os.path.exists(LOCK_DIR):
+            for fname in os.listdir(LOCK_DIR):
+                if fname.endswith(".pid") and fname != f"{app_name}.pid":
+                    other_lock = os.path.join(LOCK_DIR, fname)
+                    try:
+                        with open(other_lock, "r") as f:
+                            other_pid_str = f.read().strip()
+                        if other_pid_str:
+                            other_pid = int(other_pid_str)
+                            if other_pid != my_pid:
+                                try:
+                                    os.kill(other_pid, signal.SIGTERM)
+                                except ProcessLookupError:
+                                    pass
+                        os.remove(other_lock)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
 
     # Write our own PID
     try:
@@ -132,6 +155,22 @@ class SmartFocus:
 
         window.connect("destroy", _cleanup)
         atexit.register(_cleanup)
+
+        # Monitor Hyprland active window: if window loses focus (e.g. clicking desktop or another window), close immediately
+        def _poll_focus():
+            if cleaned_up[0]:
+                return False
+            if getattr(window, "ready_to_close", False) and not getattr(window, "is_showing_dialog", False):
+                if not window.is_active():
+                    window.close()
+                    return False
+            return True
+
+        try:
+            from gi.repository import GLib
+            GLib.timeout_add(150, _poll_focus)
+        except Exception:
+            pass
 
         # Handle SIGTERM
         try:

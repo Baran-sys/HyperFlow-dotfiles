@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Görev Yöneticisi
+Comment=Sistem Süreçleri ve Kaynak Kullanımı
+Exec=/home/bren/.local/bin/task-manager
+Icon=utilities-system-monitor
+Terminal=false
+Type=Application
+Categories=System;Monitor;
+StartupWMClass=task-manager
+NoDisplay=true

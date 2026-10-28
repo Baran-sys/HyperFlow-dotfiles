@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec /home/bren/.local/bin/wifi-manager "$@"
+exec $HOME/.local/bin/wifi-manager "$@"

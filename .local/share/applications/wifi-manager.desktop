@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Wi-Fi Yöneticisi
+Comment=Wi-Fi Ağlarını Yönetin ve Bağlanın
+Exec=/home/bren/.local/bin/wifi-manager
+Icon=network-wireless
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Network;
+StartupWMClass=wifi-manager
+NoDisplay=true

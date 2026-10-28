@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-export PATH="/home/bren/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:$PATH"
+export PATH="$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:$PATH"
 LOGFILE="/tmp/toggle-theme.log"
 
 # Mutex to debounce rapid clicks
@@ -81,7 +81,7 @@ fi
 
 if [ "$current" = "light" ]; then
     TARGET="dark"
-    WP="/home/bren/.config/assets/backgrounds/cat_leaves.png"
+    WP="$HOME/.config/assets/backgrounds/cat_leaves.png"
     WP_BLUR="cat_leaves_blurred.png"
     COLOR_SCHEME="prefer-dark"
     GTK_THEME="Catppuccin-Mocha"
@@ -98,7 +98,7 @@ if [ "$current" = "light" ]; then
     KITTY_THEME="Catppuccin-Mocha"
 else
     TARGET="light"
-    WP="/home/bren/.config/assets/backgrounds/cat_leaves_light.png"
+    WP="$HOME/.config/assets/backgrounds/cat_leaves_light.png"
     WP_BLUR="cat_leaves_blurred_light.png"
     COLOR_SCHEME="prefer-light"
     GTK_THEME="Catppuccin-Latte"
