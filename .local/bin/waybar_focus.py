@@ -7,6 +7,7 @@ Waybar Smart Focus & Dynamic Theming Helper (Ultra-Optimized)
 """
 import os
 import sys
+import time
 import atexit
 import signal
 import subprocess
@@ -18,16 +19,49 @@ except Exception:
     pass
 
 _THEME_CSS_CACHE = {}
+_CURRENT_APP_NAME = None
+
+def record_closed(app_name):
+    if not app_name:
+        return
+    try:
+        closed_file = os.path.join(LOCK_DIR, f"{app_name}.closed")
+        with open(closed_file, "w") as f:
+            f.write(str(time.time()))
+    except Exception:
+        pass
 
 def fast_toggle_or_lock(app_name):
     """
     Lightning-fast toggle & mutual exclusion check:
-    1. If this app is already running, send SIGTERM and exit immediately (<0.1ms).
-    2. If any other Waybar applet is open, terminate it so only one applet is open at a time.
-    3. Register current PID and return.
+    1. If this app was closed within the last 450ms (e.g. by clicking Waybar widget while open),
+       exit immediately so it does NOT close and reopen.
+    2. If this app is already running, send SIGTERM, record closed timestamp, and exit immediately (<0.1ms).
+    3. If any other Waybar applet is open, terminate it so only one applet is open at a time.
+    4. Register current PID and return.
     """
+    global _CURRENT_APP_NAME
+    _CURRENT_APP_NAME = app_name
     my_pid = os.getpid()
     lock_file = os.path.join(LOCK_DIR, f"{app_name}.pid")
+    closed_file = os.path.join(LOCK_DIR, f"{app_name}.closed")
+
+    # If the app was closed within the last 450ms, this launch was triggered by the same
+    # Waybar click that dismissed the open applet. Exit immediately!
+    if os.path.exists(closed_file):
+        try:
+            with open(closed_file, "r") as f:
+                content = f.read().strip()
+            if content:
+                closed_time = float(content)
+                if (time.time() - closed_time) < 0.45:
+                    try:
+                        os.remove(closed_file)
+                    except Exception:
+                        pass
+                    sys.exit(0)
+        except Exception:
+            pass
 
     # Clean up any lingering Hyprland mouse binds
     try:
@@ -48,6 +82,7 @@ def fast_toggle_or_lock(app_name):
                             os.kill(old_pid, 0)
                             # If alive, toggle off: terminate it and exit immediately!
                             os.kill(old_pid, signal.SIGTERM)
+                            record_closed(app_name)
                             try:
                                 os.remove(lock_file)
                             except Exception:
@@ -90,6 +125,7 @@ def fast_toggle_or_lock(app_name):
 
     # Clean up lockfile on exit
     def _remove_lock():
+        record_closed(app_name)
         try:
             if os.path.exists(lock_file):
                 with open(lock_file, "r") as f:
@@ -181,6 +217,7 @@ class SmartFocus:
         def _cleanup(*args):
             if not cleaned_up[0]:
                 cleaned_up[0] = True
+                record_closed(_CURRENT_APP_NAME)
                 try:
                     subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -245,6 +282,7 @@ class SmartFocus:
                         return
 
                 # Click was OUTSIDE applet bounds: dismiss!
+                record_closed(_CURRENT_APP_NAME)
                 from gi.repository import GLib
                 GLib.idle_add(window.close)
             except Exception:
