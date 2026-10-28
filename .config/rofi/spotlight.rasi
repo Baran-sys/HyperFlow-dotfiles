@@ -11,6 +11,8 @@ configuration {
     me-select-entry: "";
     me-accept-entry: "MousePrimary";
     click-to-exit: true;
+    kb-custom-1: "Alt+h";
+    kb-custom-2: "Alt+g,Alt+s";
 }
 
 * {
@@ -69,7 +71,7 @@ prompt {
 entry {
     background-color: transparent;
     text-color: @fg-col;
-    placeholder: "Spotlight Araması... (Alt+H: Gizle)";
+    placeholder: "Spotlight... (Alt+H: Gizle | Alt+G: Gizliler)";
     placeholder-color: @grey;
     cursor: text;
     font: "JetBrainsMono Nerd Font 14";

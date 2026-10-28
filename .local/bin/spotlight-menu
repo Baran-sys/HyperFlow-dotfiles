@@ -1,189 +1,413 @@
-#!/usr/bin/env bash
-# ==============================================================================
-# Spotlight Menu & Application Visibility Manager (Rofi)
-# - Normal açılış: rofi -show drun (Alt+H: Uygulama Gizleme / Gösterme Yöneticisi)
-# - Argümanlar:
-#   --manage : Uygulama Gizleme / Gösterme Yöneticisini doğrudan açar
-#   --hide <Name> : İsmi verilen uygulamayı gizler
-# ==============================================================================
+#!/usr/bin/env python3
+"""
+Spotlight Menu & Application Visibility Manager (Rofi)
+------------------------------------------------------
+Kullanım:
+  • Super + A (veya spotlight-menu) : Spotlight Uygulama Başlatıcısını açar / kapatır.
+  • Enter / Sol Tık                 : Seçili uygulamayı başlatır.
+  • Alt + H                         : Seçili (üzerinde durulan) uygulamayı ANINDA gizler.
+  • Alt + G (veya Alt + S)          : Gizlenen Uygulamalar Yöneticisini açar / kapatır.
+                                      (Gizli listede Enter veya Alt+H basarak uygulamayı geri getirebilirsiniz.)
+"""
 
-LOCAL_APPS="$HOME/.local/share/applications"
-mkdir -p "$LOCAL_APPS"
-
-APPLETS=(
-    "audio-mixer.desktop"
-    "bluetooth-manager.desktop"
-    "calendar-app.desktop"
-    "media-player.desktop"
-    "task-manager.desktop"
-    "wifi-manager.desktop"
-    "power-menu.desktop"
-    "power-session.desktop"
-)
-
-is_applet() {
-    local base="$1"
-    for a in "${APPLETS[@]}"; do
-        [[ "$base" == "$a" ]] && return 0
-    done
-    return 1
-}
-
-ensure_applets_hidden() {
-    for a in "${APPLETS[@]}"; do
-        local f="$LOCAL_APPS/$a"
-        if [ -f "$f" ] && ! grep -q "^NoDisplay=true" "$f" 2>/dev/null; then
-            echo "NoDisplay=true" >> "$f"
-        fi
-    done
-}
-
-hide_or_toggle_desktop_file() {
-    local src_file="$1"
-    local force_state="$2" # "true" | "false" | "toggle"
-    local base
-    base="$(basename "$src_file")"
-    local target="$LOCAL_APPS/$base"
-
-    if [ "$src_file" != "$target" ] && [ ! -f "$target" ]; then
-        cp "$src_file" "$target"
-    fi
-
-    local cur_hidden="false"
-    if grep -q "^NoDisplay=true" "$target" 2>/dev/null; then
-        cur_hidden="true"
-    fi
-
-    local new_state="$force_state"
-    if [ "$force_state" = "toggle" ]; then
-        if [ "$cur_hidden" = "true" ]; then
-            new_state="false"
-        else
-            new_state="true"
-        fi
-    fi
-
-    if grep -q "^NoDisplay=" "$target" 2>/dev/null; then
-        sed -i "s/^NoDisplay=.*/NoDisplay=$new_state/" "$target"
-    else
-        echo "NoDisplay=$new_state" >> "$target"
-    fi
-
-    local app_name
-    app_name=$(grep -m1 "^Name=" "$target" | cut -d= -f2-)
-    if [ "$new_state" = "true" ]; then
-        notify-send -a "Spotlight" -t 2000 "Uygulama Gizlendi" "'${app_name:-$base}' artık Spotlight'ta görünmeyecek."
-    else
-        notify-send -a "Spotlight" -t 2000 "Uygulama Gösterildi" "'${app_name:-$base}' tekrar Spotlight'a eklendi."
-    fi
-    update-desktop-database "$LOCAL_APPS" 2>/dev/null || true
-}
-
-manage_hidden_apps() {
-    python3 - << 'PYEOF'
 import os
-import glob
+import sys
+import shutil
 import subprocess
 from pathlib import Path
 
-local_dir = Path.home() / ".local/share/applications"
-sys_dirs = [
-    local_dir,
+try:
+    import gi
+    gi.require_version("Gio", "2.0")
+    from gi.repository import Gio
+    HAS_GIO = True
+except Exception:
+    HAS_GIO = False
+
+LOCAL_APPS = Path.home() / ".local/share/applications"
+ROFI_THEME = str(Path.home() / ".config/rofi/spotlight.rasi")
+
+SYS_APP_DIRS = [
+    LOCAL_APPS,
     Path.home() / ".local/share/flatpak/exports/share/applications",
     Path("/var/lib/flatpak/exports/share/applications"),
     Path("/usr/local/share/applications"),
     Path("/usr/share/applications"),
 ]
 
-applets = {
-    "audio-mixer.desktop", "bluetooth-manager.desktop", "calendar-app.desktop",
-    "media-player.desktop", "task-manager.desktop", "wifi-manager.desktop",
-    "power-menu.desktop", "power-session.desktop", "spotlight-manager.desktop"
+# Waybar applets that should always stay out of the main launcher by default
+INTERNAL_APPLETS = {
+    "audio-mixer.desktop",
+    "bluetooth-manager.desktop",
+    "calendar-app.desktop",
+    "media-player.desktop",
+    "task-manager.desktop",
+    "wifi-manager.desktop",
+    "power-menu.desktop",
+    "power-session.desktop",
+    "spotlight-manager.desktop",
 }
 
-apps = {}
-for d in sys_dirs:
-    if not d.exists():
-        continue
-    for f in sorted(d.glob("*.desktop")):
-        if f.name in applets or f.name in apps:
-            continue
+DEFAULT_HIDDEN_SYSTEM_APPS = [
+    "rofi.desktop",
+    "rofi-theme-selector.desktop",
+    "avahi-discover.desktop",
+    "bvnc.desktop",
+    "bssh.desktop",
+]
+
+
+def ensure_applets_hidden():
+    LOCAL_APPS.mkdir(parents=True, exist_ok=True)
+    for applet in INTERNAL_APPLETS:
+        f = LOCAL_APPS / applet
+        if f.exists():
+            try:
+                text = f.read_text(encoding="utf-8", errors="ignore")
+                if "NoDisplay=true" not in text:
+                    set_desktop_nodisplay(f, True, notify=False)
+            except Exception:
+                pass
+
+    marker = LOCAL_APPS / ".default_hidden_initialized"
+    if not marker.exists():
+        for sys_app in DEFAULT_HIDDEN_SYSTEM_APPS:
+            src = Path("/usr/share/applications") / sys_app
+            target = LOCAL_APPS / sys_app
+            if src.exists() and not target.exists():
+                set_desktop_nodisplay(src, True, notify=False)
         try:
-            text = f.read_text(encoding="utf-8", errors="ignore")
+            marker.write_text("1\n", encoding="utf-8")
         except Exception:
+            pass
+
+
+def parse_desktop_file(fpath: Path):
+    """Fast parser for [Desktop Entry] fields."""
+    try:
+        text = fpath.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return None
+
+    in_entry = False
+    name = None
+    name_tr = None
+    generic = ""
+    comment = ""
+    keywords = ""
+    icon = "application-x-executable"
+    exec_cmd = None
+    nodisplay = False
+    hidden = False
+    dtype = "Application"
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
             continue
-        if "[Desktop Entry]" not in text:
-            continue
-        name = None
-        nodisplay = False
-        hidden = False
-        for line in text.splitlines():
-            line = line.strip()
-            if line.startswith("[") and line != "[Desktop Entry]":
+        if line.startswith("["):
+            if line == "[Desktop Entry]":
+                in_entry = True
+                continue
+            elif in_entry:
                 break
-            if line.startswith("Name=") and not name:
-                name = line.split("=", 1)[1].strip()
-            elif line.startswith("NoDisplay="):
-                nodisplay = line.split("=", 1)[1].strip().lower() == "true"
-            elif line.startswith("Hidden="):
-                hidden = line.split("=", 1)[1].strip().lower() == "true"
-        if hidden or not name:
+            else:
+                continue
+        if not in_entry or "=" not in line:
             continue
-        # Ignore system-internal helpers that have NoDisplay=true only in /usr/share
-        if nodisplay and f.parent != local_dir:
+
+        k, v = line.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+
+        if k == "Name" and not name:
+            name = v
+        elif k == "Name[tr]" and not name_tr:
+            name_tr = v
+        elif k in ("GenericName", "GenericName[tr]"):
+            generic = f"{generic} {v}".strip()
+        elif k in ("Comment", "Comment[tr]"):
+            comment = f"{comment} {v}".strip()
+        elif k in ("Keywords", "Keywords[tr]"):
+            keywords = f"{keywords} {v}".strip()
+        elif k == "Icon" and v:
+            icon = v
+        elif k == "Exec" and not exec_cmd:
+            exec_cmd = v
+        elif k == "NoDisplay":
+            nodisplay = v.lower() == "true"
+        elif k == "Hidden":
+            hidden = v.lower() == "true"
+        elif k == "Type":
+            dtype = v
+
+    display_name = name_tr or name
+    if dtype != "Application" or hidden or not display_name or not exec_cmd:
+        return None
+
+    return {
+        "filename": fpath.name,
+        "path": fpath,
+        "name": display_name,
+        "raw_name": name or display_name,
+        "icon": icon,
+        "meta": f"{name or ''} {generic} {comment} {keywords} {fpath.stem}".strip(),
+        "nodisplay": nodisplay,
+        "is_local": fpath.parent == LOCAL_APPS,
+    }
+
+
+def scan_applications():
+    """Returns (visible_apps, hidden_apps) sorted alphabetically by display name."""
+    seen = set()
+    visible = []
+    hidden = []
+
+    for d in SYS_APP_DIRS:
+        if not d.exists():
             continue
-        apps[f.name] = (name, nodisplay, str(f))
+        for f in sorted(d.glob("*.desktop")):
+            if f.name in seen or f.name in INTERNAL_APPLETS:
+                continue
+            seen.add(f.name)
+            info = parse_desktop_file(f)
+            if not info:
+                continue
+            if info["nodisplay"]:
+                # Show in Hidden Apps manager if it was hidden in ~/.local/share/applications
+                # or if it's a user-facing desktop file overridden locally
+                if info["is_local"]:
+                    hidden.append(info)
+            else:
+                visible.append(info)
 
-items = sorted(apps.items(), key=lambda x: (not x[1][1], x[1][0].lower()))
-menu_lines = []
-lookup = {}
-for fname, (name, is_hid, fpath) in items:
-    status = "󰈉  [Gizli]" if is_hid else "󰈈  [Görünür]"
-    label = f"{status}  {name}  ({fname})"
-    menu_lines.append(label)
-    lookup[label] = fpath
+    visible.sort(key=lambda x: x["name"].lower())
+    hidden.sort(key=lambda x: x["name"].lower())
+    return visible, hidden
 
-if not menu_lines:
-    raise SystemExit(0)
 
-proc = subprocess.run(
-    ["rofi", "-dmenu", "-i", "-p", "󰈈 ", "-mesg", "Gizlemek veya tekrar göstermek istediğiniz uygulamayı seçin (Enter):", "-theme", os.path.expanduser("~/.config/rofi/spotlight.rasi")],
-    input="\n".join(menu_lines),
-    text=True,
-    capture_output=True
-)
-choice = proc.stdout.strip()
-if proc.returncode == 0 and choice in lookup:
-    subprocess.run([os.path.expanduser("~/.local/bin/spotlight-menu"), "--toggle-file", lookup[choice]])
-PYEOF
-}
+def set_desktop_nodisplay(src_path: Path, hide: bool, notify: bool = True):
+    """Copies .desktop file to ~/.local/share/applications if needed and sets NoDisplay."""
+    LOCAL_APPS.mkdir(parents=True, exist_ok=True)
+    target = LOCAL_APPS / src_path.name
 
-ensure_applets_hidden
+    # If unhiding a local override of a system desktop file that wasn't originally NoDisplay=true,
+    # we can either set NoDisplay=false or update the local file cleanly.
+    if src_path.resolve() != target.resolve() and not target.exists():
+        shutil.copyfile(src_path, target)
 
-case "${1:-}" in
-    --manage)
-        manage_hidden_apps
-        exit 0
-        ;;
-    --toggle-file)
-        if [ -n "${2:-}" ] && [ -f "${2:-}" ]; then
-            hide_or_toggle_desktop_file "$2" "toggle"
-        fi
-        exit 0
-        ;;
-esac
+    try:
+        lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return
 
-# Toggle: If rofi is already open, close it
-if pkill -x rofi; then
-    exit 0
-fi
+    new_val = "true" if hide else "false"
+    out_lines = []
+    in_entry = False
+    replaced = False
 
-# Run spotlight rofi (Alt+H opens the Hide/Unhide Manager)
-rofi -show drun \
-    -kb-custom-1 "Alt+h" \
-    -theme ~/.config/rofi/spotlight.rasi
-rofi_exit=$?
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("["):
+            if in_entry and not replaced:
+                out_lines.append(f"NoDisplay={new_val}")
+                replaced = True
+            in_entry = (stripped == "[Desktop Entry]")
+            out_lines.append(line)
+            continue
 
-if [ $rofi_exit -eq 10 ]; then
-    manage_hidden_apps
-fi
+        if in_entry and stripped.startswith("NoDisplay="):
+            if not replaced:
+                out_lines.append(f"NoDisplay={new_val}")
+                replaced = True
+            continue
+
+        out_lines.append(line)
+
+    if not replaced:
+        out_lines.append(f"NoDisplay={new_val}")
+
+    target.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+    if notify:
+        info = parse_desktop_file(target)
+        app_title = info["name"] if info else src_path.stem
+        if hide:
+            subprocess.Popen([
+                "notify-send", "-a", "Spotlight", "-t", "2200",
+                "Uygulama Gizlendi (Alt+H)",
+                f"'{app_title}' gizlendi.\nGeri getirmek için Rofi'de Alt+G tuşuna basın."
+            ])
+        else:
+            subprocess.Popen([
+                "notify-send", "-a", "Spotlight", "-t", "2200",
+                "Uygulama Gösterildi",
+                f"'{app_title}' tekrar Spotlight listesine eklendi."
+            ])
+
+
+def launch_desktop_app(fpath: Path):
+    """Launches a .desktop file cleanly in the background."""
+    if HAS_GIO:
+        try:
+            app_info = Gio.DesktopAppInfo.new_from_filename(str(fpath))
+            if app_info:
+                app_info.launch([], None)
+                return
+        except Exception:
+            pass
+    subprocess.Popen(
+        ["gtk-launch", fpath.name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def run_rofi_dmenu(rows_payload: str, prompt: str, placeholder: str, selected_row: int = 0):
+    cmd = [
+        "rofi",
+        "-dmenu",
+        "-i",
+        "-show-icons",
+        "-format", "i",
+        "-p", prompt,
+        "-selected-row", str(max(0, selected_row)),
+        "-kb-custom-1", "Alt+h,Alt+H",
+        "-kb-custom-2", "Alt+g,Alt+G,Alt+s,Alt+S",
+        "-theme", ROFI_THEME,
+        "-theme-str", f'entry {{ placeholder: "{placeholder}"; }}',
+    ]
+    proc = subprocess.run(cmd, input=rows_payload, text=True, capture_output=True)
+    idx = -1
+    out = proc.stdout.strip()
+    if out.isdigit():
+        idx = int(out)
+    return proc.returncode, idx
+
+
+def main():
+    ensure_applets_hidden()
+
+    # CLI flags support
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--manage":
+            mode = "hidden"
+        elif sys.argv[1] == "--toggle-file" and len(sys.argv) > 2:
+            p = Path(sys.argv[2])
+            if p.exists():
+                info = parse_desktop_file(p)
+                cur = info["nodisplay"] if info else False
+                set_desktop_nodisplay(p, not cur, notify=True)
+            return
+        else:
+            mode = "normal"
+    else:
+        # Toggle: if rofi is already running, close it and exit
+        res = subprocess.run(["pkill", "-x", "rofi"], capture_output=True)
+        if res.returncode == 0:
+            return
+        mode = "normal"
+
+    selected_row = 0
+
+    while True:
+        visible_apps, hidden_apps = scan_applications()
+
+        if mode == "normal":
+            lines = []
+            for app in visible_apps:
+                lines.append(
+                    f"{app['name']}\0icon\x1f{app['icon']}\x1fmeta\x1f{app['meta']}"
+                )
+            # Add a helper item at the bottom to access hidden apps via mouse/Enter too
+            hidden_count = len(hidden_apps)
+            manage_label = f"Gizli Uygulamaları Yönet ({hidden_count} gizli) — [Alt+G]"
+            lines.append(
+                f"{manage_label}\0icon\x1fview-hidden\x1fmeta\x1fgizli hidden manage ayarlar"
+            )
+
+            if selected_row >= len(lines):
+                selected_row = max(0, len(lines) - 1)
+
+            rc, idx = run_rofi_dmenu(
+                "\n".join(lines),
+                prompt=" ",
+                placeholder="Spotlight... (Alt+H: Seçiliyi Gizle | Alt+G: Gizliler)",
+                selected_row=selected_row,
+            )
+
+            if rc == 0:  # Enter / Left Click
+                if idx == len(visible_apps):
+                    mode = "hidden"
+                    selected_row = 0
+                    continue
+                elif 0 <= idx < len(visible_apps):
+                    launch_desktop_app(visible_apps[idx]["path"])
+                break
+
+            elif rc == 10:  # Alt+H -> Hide currently selected app immediately!
+                if idx == len(visible_apps):
+                    mode = "hidden"
+                    selected_row = 0
+                    continue
+                elif 0 <= idx < len(visible_apps):
+                    set_desktop_nodisplay(visible_apps[idx]["path"], True, notify=True)
+                    selected_row = min(idx, max(0, len(visible_apps) - 2))
+                    continue
+                break
+
+            elif rc == 11:  # Alt+G / Alt+S -> Open Hidden Apps Manager
+                mode = "hidden"
+                selected_row = 0
+                continue
+
+            else:
+                break
+
+        elif mode == "hidden":
+            lines = []
+            for app in hidden_apps:
+                lines.append(
+                    f"󰈉  [Gizli]  {app['name']}\0icon\x1f{app['icon']}\x1fmeta\x1f{app['meta']}"
+                )
+            lines.append(
+                "󰌍  Spotlight'a Geri Dön — [Alt+G]\0icon\x1fgo-previous\x1fmeta\x1fgeri back return"
+            )
+
+            if selected_row >= len(lines):
+                selected_row = max(0, len(lines) - 1)
+
+            rc, idx = run_rofi_dmenu(
+                "\n".join(lines),
+                prompt="󰈉 ",
+                placeholder="Gizli Uygulamalar (Enter/Alt+H: Geri Getir | Alt+G: Geri)",
+                selected_row=selected_row,
+            )
+
+            if rc in (0, 10):  # Enter or Alt+H -> Unhide selected app!
+                if idx == len(hidden_apps):
+                    mode = "normal"
+                    selected_row = 0
+                    continue
+                elif 0 <= idx < len(hidden_apps):
+                    set_desktop_nodisplay(hidden_apps[idx]["path"], False, notify=True)
+                    selected_row = min(idx, max(0, len(hidden_apps) - 2))
+                    # If no hidden apps left, automatically return to normal view
+                    if len(hidden_apps) <= 1:
+                        mode = "normal"
+                        selected_row = 0
+                    continue
+                break
+
+            elif rc == 11:  # Alt+G / Alt+S -> Back to normal Spotlight
+                mode = "normal"
+                selected_row = 0
+                continue
+
+            else:
+                break
+
+
+if __name__ == "__main__":
+    main()

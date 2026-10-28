@@ -493,21 +493,19 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                 pass
 
             # Universal DRM sysfs scan for Intel (gt_act_freq_mhz) & AMD (gpu_busy_percent)
-            for card_dir in glob.glob("/sys/class/drm/card[0-9]*"):
-                for fpath in glob.glob(os.path.join(card_dir, "**/gt_act_freq_mhz"), recursive=True):
-                    try:
-                        intel_mhz = max(intel_mhz, int(open(fpath).read().strip()))
-                        max_p = os.path.join(os.path.dirname(fpath), "gt_max_freq_mhz")
-                        if os.path.exists(max_p):
-                            intel_max_mhz = max(300, int(open(max_p).read().strip()))
-                    except Exception:
-                        pass
-                busy_path = os.path.join(card_dir, "device/gpu_busy_percent")
-                if os.path.exists(busy_path):
-                    try:
-                        amd_util = max(amd_util, int(open(busy_path).read().strip()))
-                    except Exception:
-                        pass
+            for fpath in glob.glob("/sys/class/drm/card[0-9]*/gt_act_freq_mhz") + glob.glob("/sys/class/drm/card[0-9]*/device/tile*/gt*/freq*/act_freq"):
+                try:
+                    intel_mhz = max(intel_mhz, int(open(fpath).read().strip()))
+                    max_p = os.path.join(os.path.dirname(fpath), "gt_max_freq_mhz")
+                    if os.path.exists(max_p):
+                        intel_max_mhz = max(300, int(open(max_p).read().strip()))
+                except Exception:
+                    pass
+            for busy_path in glob.glob("/sys/class/drm/card[0-9]*/device/gpu_busy_percent"):
+                try:
+                    amd_util = max(amd_util, int(open(busy_path).read().strip()))
+                except Exception:
+                    pass
 
             # Fallback GPU temp from psutil if NVIDIA temp isn't active
             try:

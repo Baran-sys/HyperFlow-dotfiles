@@ -245,8 +245,10 @@ reload_environment() {
         echo -e "Hyprland oturumu tespit edildi, yapılandırma yeniden yükleniyor..."
         hyprctl reload &>/dev/null || true
         killall waybar &>/dev/null || true
+        sleep 0.2
         hyprctl dispatch exec waybar &>/dev/null || true
         pkill -f "desktop-manager" &>/dev/null || true
+        sleep 0.4
         hyprctl dispatch exec "${HOME}/.local/bin/desktop-manager" &>/dev/null || true
         echo -e "${GREEN}✓ Hyprland, Waybar ve Masaüstü Yöneticisi (desktop-manager) yenilendi.${NC}"
     else

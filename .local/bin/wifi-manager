@@ -574,6 +574,15 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
                 item_conn.connect("activate", lambda i: self.connect_network(net))
                 menu.append(item_conn)
 
+            if net.get("security"):
+                item_repass = Gtk.MenuItem(label="Parola Gir / Değiştir...")
+                item_repass.connect("activate", lambda i: self.show_password_dialog(net["ssid"], net=net))
+                menu.append(item_repass)
+
+            item_ent = Gtk.MenuItem(label="Kurumsal Ağ (802.1X / EAP) Yapılandır...")
+            item_ent.connect("activate", lambda i: self.show_enterprise_dialog(net))
+            menu.append(item_ent)
+
             if net["ssid"] in self.saved_connections:
                 item_forget = Gtk.MenuItem(label="Bu Ağı Unut")
                 item_forget.connect("activate", lambda i: self.forget_network(net["ssid"]))
@@ -602,10 +611,10 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
     def is_enterprise_network(self, net):
         sec = (net.get("security") or "").upper()
-        ssid = (net.get("ssid") or "").upper()
+        ssid = (net.get("ssid") or "").lower()
         if "802.1X" in sec or "EAP" in sec or "ENTERPRISE" in sec:
             return True
-        if any(k in ssid for k in ("EDUROAM", "KTUN", "OGRENCI", "PERSONEL")):
+        if ssid == "eduroam":
             return True
         return False
 
@@ -623,14 +632,13 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
     def show_enterprise_dialog(self, net):
         ssid = net["ssid"]
-        is_ktun = any(k in ssid.upper() for k in ("KTUN", "EDUROAM", "OGRENCI"))
 
         dialog = Gtk.Dialog(
             title=f"Kurumsal Ağa Bağlan ({ssid})",
             parent=self,
             flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT
         )
-        dialog.set_default_size(420, 320)
+        dialog.set_default_size(440, 380)
         dialog.set_border_width(12)
 
         content = dialog.get_content_area()
@@ -640,16 +648,10 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         content.add(vbox)
 
         lbl_head = Gtk.Label()
-        if is_ktun:
-            lbl_head.set_markup(
-                f"<b>{GLib.markup_escape_text(ssid)}</b> (802.1X / Kurumsal Wi-Fi)\n"
-                "<small><span alpha='75%'>KTÜN Öğrenci No veya E-posta ile giriş yapın (erisim.ktun.edu.tr şifreniz)</span></small>"
-            )
-        else:
-            lbl_head.set_markup(
-                f"<b>{GLib.markup_escape_text(ssid)}</b> (WPA-EAP / 802.1X Kurumsal Ağ)\n"
-                "<small><span alpha='75%'>Kurumsal kullanıcı adı ve parolanızı girin:</span></small>"
-            )
+        lbl_head.set_markup(
+            f"<b>{GLib.markup_escape_text(ssid)}</b> (WPA-EAP / 802.1X Kurumsal Ağ)\n"
+            "<small><span alpha='75%'>Ağınızın kimlik doğrulama yöntemi ve kullanıcı bilgilerinizi girin:</span></small>"
+        )
         lbl_head.set_halign(Gtk.Align.START)
         lbl_head.set_line_wrap(True)
         vbox.pack_start(lbl_head, False, False, 0)
@@ -663,8 +665,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         lbl_eap = Gtk.Label(label="EAP Yöntemi:")
         lbl_eap.set_halign(Gtk.Align.START)
         combo_eap = Gtk.ComboBoxText()
-        combo_eap.append("peap", "PEAP (Önerilen)")
-        combo_eap.append("ttls", "TTLS")
+        combo_eap.append("peap", "PEAP (Protected EAP)")
+        combo_eap.append("ttls", "TTLS (Tunneled TLS)")
+        combo_eap.append("pwd", "PWD")
+        combo_eap.append("tls", "TLS")
+        combo_eap.append("fast", "FAST")
+        combo_eap.append("leap", "LEAP")
         combo_eap.set_active_id("peap")
         grid.attach(lbl_eap, 0, 0, 1, 1)
         grid.attach(combo_eap, 1, 0, 1, 1)
@@ -673,21 +679,49 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         lbl_p2 = Gtk.Label(label="Faz 2 Doğrulama:")
         lbl_p2.set_halign(Gtk.Align.START)
         combo_p2 = Gtk.ComboBoxText()
-        combo_p2.append("mschapv2", "MSCHAPv2 (KTÜN / Eduroam)")
+        combo_p2.append("mschapv2", "MSCHAPv2")
         combo_p2.append("pap", "PAP")
         combo_p2.append("gtc", "GTC")
+        combo_p2.append("mschap", "MSCHAP")
+        combo_p2.append("chap", "CHAP")
+        combo_p2.append("none", "Yok / Otomatik")
         combo_p2.set_active_id("mschapv2")
         grid.attach(lbl_p2, 0, 1, 1, 1)
         grid.attach(combo_p2, 1, 1, 1, 1)
 
-        # Identity / Student No
-        lbl_user = Gtk.Label(label="Öğrenci No / Kimlik:")
+        # CA Certificate Mode
+        lbl_ca = Gtk.Label(label="CA Sertifikası:")
+        lbl_ca.set_halign(Gtk.Align.START)
+        combo_ca = Gtk.ComboBoxText()
+        combo_ca.append("none", "Sertifika Gerekmiyor (Doğrulama Yok)")
+        combo_ca.append("system", "Sistem CA Sertifikalarını Kullan")
+        combo_ca.append("file", "Özel Sertifika Dosyası Seç (.crt/.pem)")
+        combo_ca.set_active_id("none")
+        grid.attach(lbl_ca, 0, 2, 1, 1)
+        grid.attach(combo_ca, 1, 2, 1, 1)
+
+        # Optional CA Cert File Chooser
+        lbl_ca_file = Gtk.Label(label="Sertifika Dosyası:")
+        lbl_ca_file.set_halign(Gtk.Align.START)
+        file_ca = Gtk.FileChooserButton(title="CA Sertifikası Seçin", action=Gtk.FileChooserAction.OPEN)
+        grid.attach(lbl_ca_file, 0, 3, 1, 1)
+        grid.attach(file_ca, 1, 3, 1, 1)
+
+        def on_ca_mode_changed(combo):
+            is_file = combo.get_active_id() == "file"
+            lbl_ca_file.set_visible(is_file)
+            file_ca.set_visible(is_file)
+
+        combo_ca.connect("changed", on_ca_mode_changed)
+
+        # Identity
+        lbl_user = Gtk.Label(label="Kullanıcı Adı / Kimlik:")
         lbl_user.set_halign(Gtk.Align.START)
         entry_user = Gtk.Entry()
         entry_user.set_hexpand(True)
-        entry_user.set_placeholder_text("Örn: f21123456@ktun.edu.tr veya Öğrenci No")
-        grid.attach(lbl_user, 0, 2, 1, 1)
-        grid.attach(entry_user, 1, 2, 1, 1)
+        entry_user.set_placeholder_text("Örn: kullanici@kurum.edu.tr veya kullanici_adi")
+        grid.attach(lbl_user, 0, 4, 1, 1)
+        grid.attach(entry_user, 1, 4, 1, 1)
 
         # Anonymous Identity
         lbl_anon = Gtk.Label(label="Anonim Kimlik:")
@@ -695,24 +729,28 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         entry_anon = Gtk.Entry()
         entry_anon.set_hexpand(True)
         entry_anon.set_placeholder_text("İsteğe bağlı (boş bırakılabilir)")
-        grid.attach(lbl_anon, 0, 3, 1, 1)
-        grid.attach(entry_anon, 1, 3, 1, 1)
+        grid.attach(lbl_anon, 0, 5, 1, 1)
+        grid.attach(entry_anon, 1, 5, 1, 1)
+
+        # Domain Suffix Match (Optional)
+        lbl_dom = Gtk.Label(label="Sunucu Etki Alanı:")
+        lbl_dom.set_halign(Gtk.Align.START)
+        entry_dom = Gtk.Entry()
+        entry_dom.set_hexpand(True)
+        entry_dom.set_placeholder_text("İsteğe bağlı (örn: kurum.edu.tr)")
+        grid.attach(lbl_dom, 0, 6, 1, 1)
+        grid.attach(entry_dom, 1, 6, 1, 1)
 
         # Password
-        lbl_pass = Gtk.Label(label="Erişim Parolası:")
+        lbl_pass = Gtk.Label(label="Parola:")
         lbl_pass.set_halign(Gtk.Align.START)
         entry_pass = Gtk.Entry()
         entry_pass.set_hexpand(True)
         entry_pass.set_visibility(False)
         entry_pass.set_activates_default(True)
-        entry_pass.set_placeholder_text("İnternet / OBS erişim şifreniz")
-        grid.attach(lbl_pass, 0, 4, 1, 1)
-        grid.attach(entry_pass, 1, 4, 1, 1)
-
-        # CA Certificate option
-        chk_nocert = Gtk.CheckButton(label="CA Sertifikası Doğrulama (Sertifika kullanma - Önerilen)")
-        chk_nocert.set_active(True)
-        vbox.pack_start(chk_nocert, False, False, 0)
+        entry_pass.set_placeholder_text("Ağ erişim parolanız")
+        grid.attach(lbl_pass, 0, 7, 1, 1)
+        grid.attach(entry_pass, 1, 7, 1, 1)
 
         chk_show = Gtk.CheckButton(label="Parolayı Göster")
         chk_show.connect("toggled", lambda c: entry_pass.set_visibility(c.get_active()))
@@ -724,26 +762,32 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         dialog.set_default_response(Gtk.ResponseType.OK)
 
         dialog.show_all()
+        on_ca_mode_changed(combo_ca)
         self.is_showing_dialog = True
         try:
             response = dialog.run()
             identity = entry_user.get_text().strip()
             anon_id = entry_anon.get_text().strip()
+            domain_match = entry_dom.get_text().strip()
             password = entry_pass.get_text()
             eap_method = combo_eap.get_active_id() or "peap"
             phase2_auth = combo_p2.get_active_id() or "mschapv2"
-            no_ca_cert = chk_nocert.get_active()
+            ca_mode = combo_ca.get_active_id() or "none"
+            ca_cert_path = file_ca.get_filename() if ca_mode == "file" else None
         finally:
             dialog.destroy()
             self.is_showing_dialog = False
 
         if response == Gtk.ResponseType.OK and identity and password:
-            # If student typed only digits on KTUN network, auto-append @ktun.edu.tr if no @ present
-            if is_ktun and "@" not in identity and identity[0].isdigit():
-                identity = f"{identity}@ktun.edu.tr"
-            self._do_connect_enterprise(ssid, identity, password, eap_method, phase2_auth, anon_id, no_ca_cert)
+            self._do_connect_enterprise(
+                ssid, identity, password, eap_method, phase2_auth,
+                anon_id, ca_mode, ca_cert_path, domain_match, net=net
+            )
 
-    def _do_connect_enterprise(self, ssid, identity, password, eap_method, phase2_auth, anon_id, no_ca_cert):
+    def _do_connect_enterprise(
+        self, ssid, identity, password, eap_method, phase2_auth,
+        anon_id, ca_mode, ca_cert_path=None, domain_match="", net=None
+    ):
         self.show_info(f"'{ssid}' kurumsal ağına bağlanılıyor...", Gtk.MessageType.INFO)
         self.spinner.start()
 
@@ -758,23 +802,36 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
                 "ssid", ssid,
                 "wifi-sec.key-mgmt", "wpa-eap",
                 "802-1x.eap", eap_method,
-                "802-1x.phase2-auth", phase2_auth,
                 "802-1x.identity", identity,
                 "802-1x.password", password,
                 "802-1x.password-flags", "0",
             ]
+            if phase2_auth and phase2_auth != "none":
+                cmd.extend(["802-1x.phase2-auth", phase2_auth])
             if anon_id:
                 cmd.extend(["802-1x.anonymous-identity", anon_id])
-            if no_ca_cert:
+            if domain_match:
+                cmd.extend(["802-1x.domain-suffix-match", domain_match])
+            if ca_mode == "system":
+                cmd.extend(["802-1x.system-ca-certs", "yes"])
+            elif ca_mode == "file" and ca_cert_path:
+                cmd.extend(["802-1x.ca-cert", ca_cert_path])
+            else:
                 cmd.extend(["802-1x.system-ca-certs", "no"])
 
             res_add = subprocess.run(cmd, capture_output=True, text=True)
             if res_add.returncode != 0:
-                GLib.idle_add(self._on_connect_finished, ssid, res_add.returncode, res_add.stdout, res_add.stderr)
+                GLib.idle_add(self._on_connect_finished, ssid, res_add.returncode, res_add.stdout, res_add.stderr, net, False)
                 return
 
-            res_up = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
-            GLib.idle_add(self._on_connect_finished, ssid, res_up.returncode, res_up.stdout, res_up.stderr)
+            res_up = subprocess.run(
+                ["nmcli", "--wait", "20", "connection", "up", "id", ssid, "ifname", ifname],
+                capture_output=True, text=True
+            )
+            if res_up.returncode != 0:
+                # Clean up failed profile so it doesn't stay stuck as "Kayıtlı"
+                subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
+            GLib.idle_add(self._on_connect_finished, ssid, res_up.returncode, res_up.stdout, res_up.stderr, net, False)
 
         threading.Thread(target=ent_thread, daemon=True).start()
 
@@ -784,7 +841,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             parent=self,
             flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT
         )
-        dialog.set_default_size(380, 160)
+        dialog.set_default_size(400, 170)
         dialog.set_border_width(12)
 
         content = dialog.get_content_area()
@@ -807,6 +864,8 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         chk_show.connect("toggled", lambda c: entry.set_visibility(c.get_active()))
         vbox.pack_start(chk_show, False, False, 0)
 
+        # Button ID 42 switches directly to the 802.1X Enterprise dialog
+        dialog.add_button("802.1X / Kurumsal", 42)
         dialog.add_button("İptal", Gtk.ResponseType.CANCEL)
         btn_ok = dialog.add_button("Bağlan", Gtk.ResponseType.OK)
         btn_ok.get_style_context().add_class("btn-connect")
@@ -821,8 +880,25 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             dialog.destroy()
             self.is_showing_dialog = False
 
-        if response == Gtk.ResponseType.OK:
+        if response == 42:
+            self.show_enterprise_dialog(net or {"ssid": ssid, "security": "WPA2 802.1X"})
+        elif response == Gtk.ResponseType.OK and password:
             self._do_connect(ssid, password, net=net)
+
+    def _delete_existing_profiles(self, ssid):
+        """Removes all saved NetworkManager profiles matching SSID or connection name."""
+        subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
+        try:
+            res = subprocess.run(
+                ["nmcli", "-t", "-f", "UUID,NAME,TYPE", "connection", "show"],
+                capture_output=True, text=True
+            )
+            for line in res.stdout.splitlines():
+                parts = line.split(":")
+                if len(parts) >= 3 and parts[2] == "802-11-wireless" and parts[1] == ssid:
+                    subprocess.run(["nmcli", "connection", "delete", "uuid", parts[0]], capture_output=True)
+        except Exception:
+            pass
 
     def _do_connect(self, ssid, password, net=None):
         self.show_info(f"'{ssid}' ağına bağlanılıyor...", Gtk.MessageType.INFO)
@@ -830,54 +906,100 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         def connect_thread():
             ifname = self.get_wifi_ifname()
-            if password:
-                # Delete any stale profile first so WPA2/WPA3/SAE & PMF settings don't conflict (e.g. Samsung S23 Ultra Hotspot)
-                subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
-                cmd = ["nmcli", "--wait", "15", "device", "wifi", "connect", ssid, "password", password, "ifname", ifname]
-                res = subprocess.run(cmd, capture_output=True, text=True)
+            used_saved_without_pass = False
 
+            if password:
+                # 1. Clean any stale profile first
+                self._delete_existing_profiles(ssid)
+                sec_str = (net.get("security", "") if net else "").upper()
+                is_pure_wpa3 = ("WPA3" in sec_str and "WPA2" not in sec_str and "WPA1" not in sec_str)
+                primary_mgmt = "sae" if is_pure_wpa3 else "wpa-psk"
+
+                # 2. Create profile explicitly with psk-flags=0 (identical to nmtui so no secret agent is needed!)
+                add_cmd = [
+                    "nmcli", "connection", "add",
+                    "type", "wifi",
+                    "con-name", ssid,
+                    "ifname", ifname,
+                    "ssid", ssid,
+                    "wifi-sec.key-mgmt", primary_mgmt,
+                    "wifi-sec.psk", password,
+                    "wifi-sec.psk-flags", "0",
+                ]
+                res_add = subprocess.run(add_cmd, capture_output=True, text=True)
+                if res_add.returncode == 0:
+                    res = subprocess.run(
+                        ["nmcli", "--wait", "20", "connection", "up", "id", ssid, "ifname", ifname],
+                        capture_output=True, text=True
+                    )
+                else:
+                    res = res_add
+
+                # 3. Fallback A: WPA2/WPA3 transitional mobile hotspots (PMF optional + alternate key-mgmt)
                 if res.returncode != 0:
-                    # Fallback: explicit profile creation with PMF optional (1) for WPA2/WPA3 transitional mobile hotspots
-                    subprocess.run(["nmcli", "connection", "delete", "id", ssid], capture_output=True)
-                    sec_str = (net.get("security", "") if net else "").upper()
-                    key_mgmt = "sae" if ("WPA3" in sec_str and "WPA2" not in sec_str) else "wpa-psk"
-                    add_cmd = [
-                        "nmcli", "connection", "add",
-                        "type", "wifi",
-                        "con-name", ssid,
-                        "ifname", ifname,
-                        "ssid", ssid,
-                        "wifi-sec.key-mgmt", key_mgmt,
-                        "wifi-sec.psk", password,
-                        "wifi-sec.pmf", "1",
-                    ]
-                    res_add = subprocess.run(add_cmd, capture_output=True, text=True)
-                    if res_add.returncode == 0:
-                        res = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
-                        if res.returncode != 0 and key_mgmt == "wpa-psk" and "WPA3" in sec_str:
-                            subprocess.run(["nmcli", "connection", "modify", "id", ssid, "wifi-sec.key-mgmt", "sae"], capture_output=True)
-                            res = subprocess.run(["nmcli", "--wait", "20", "connection", "up", "id", ssid], capture_output=True, text=True)
+                    subprocess.run(["nmcli", "connection", "modify", "id", ssid, "wifi-sec.pmf", "1"], capture_output=True)
+                    res = subprocess.run(
+                        ["nmcli", "--wait", "20", "connection", "up", "id", ssid, "ifname", ifname],
+                        capture_output=True, text=True
+                    )
+
+                if res.returncode != 0 and "WPA3" in sec_str:
+                    alt_mgmt = "wpa-psk" if primary_mgmt == "sae" else "sae"
+                    subprocess.run(
+                        ["nmcli", "connection", "modify", "id", ssid, "wifi-sec.key-mgmt", alt_mgmt, "wifi-sec.pmf", "1"],
+                        capture_output=True
+                    )
+                    res = subprocess.run(
+                        ["nmcli", "--wait", "20", "connection", "up", "id", ssid, "ifname", ifname],
+                        capture_output=True, text=True
+                    )
+
+                # 4. Fallback B: Direct nmcli device wifi connect
+                if res.returncode != 0:
+                    self._delete_existing_profiles(ssid)
+                    res = subprocess.run(
+                        ["nmcli", "--wait", "15", "device", "wifi", "connect", ssid, "password", password, "ifname", ifname],
+                        capture_output=True, text=True
+                    )
+
+                # If all attempts failed, remove the broken profile so the network doesn't stay stuck as "Kayıtlı"
+                if res.returncode != 0:
+                    self._delete_existing_profiles(ssid)
             else:
                 if ssid in self.saved_connections:
-                    cmd = ["nmcli", "--wait", "15", "connection", "up", "id", ssid]
+                    used_saved_without_pass = True
+                    cmd = ["nmcli", "--wait", "15", "connection", "up", "id", ssid, "ifname", ifname]
                 else:
                     cmd = ["nmcli", "--wait", "15", "device", "wifi", "connect", ssid, "ifname", ifname]
                 res = subprocess.run(cmd, capture_output=True, text=True)
 
-            GLib.idle_add(self._on_connect_finished, ssid, res.returncode, res.stdout, res.stderr)
+            GLib.idle_add(
+                self._on_connect_finished,
+                ssid, res.returncode, res.stdout, res.stderr, net, used_saved_without_pass
+            )
 
         threading.Thread(target=connect_thread, daemon=True).start()
 
-    def _on_connect_finished(self, ssid, returncode, stdout, stderr):
+    def _on_connect_finished(self, ssid, returncode, stdout, stderr, net=None, used_saved_without_pass=False):
         self.spinner.stop()
         if returncode == 0:
             self.show_info(f"'{ssid}' ağına başarıyla bağlandı!", Gtk.MessageType.INFO)
             self.start_scan(rescan=False)
         else:
             err_msg = stderr.strip() or stdout.strip() or "Bağlantı hatası oluştu."
-            if "Secrets were required" in err_msg or "authentication failed" in err_msg:
-                err_msg = "Parola hatalı veya doğrulama başarısız oldu."
+            # If a previously saved profile failed due to missing/changed password, prompt the user immediately!
+            if used_saved_without_pass and net and net.get("security"):
+                self.show_info(f"'{ssid}' için parola doğrulaması gerekiyor.", Gtk.MessageType.WARNING)
+                if self.is_enterprise_network(net):
+                    self.show_enterprise_dialog(net)
+                else:
+                    self.show_password_dialog(ssid, net=net)
+                return
+
+            if "Secrets were required" in err_msg or "authentication" in err_msg.lower() or "no-secrets" in err_msg.lower():
+                err_msg = "Parola hatalı veya kimlik doğrulama başarısız oldu."
             self.show_info(f"Bağlantı Hatası: {err_msg}", Gtk.MessageType.ERROR)
+            self.start_scan(rescan=False)
 
     def disconnect_network(self):
         self.show_info("Bağlantı kesiliyor...", Gtk.MessageType.INFO)

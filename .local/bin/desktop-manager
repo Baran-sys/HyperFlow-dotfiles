@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlparse
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
+gi.require_version('PangoCairo', '1.0')
 gi.require_version('GtkLayerShell', '0.1')
 from gi.repository import Gtk, Gdk, Gio, GLib, Pango, PangoCairo, GdkPixbuf, GtkLayerShell
 import cairo
@@ -277,11 +278,13 @@ class DesktopManager(Gtk.Window):
         self.darea.connect("leave-notify-event", self.on_leave_notify)
 
         self.darea.connect("draw", self.on_draw)
+        self.darea.connect("size-allocate", self.on_size_allocate)
         self.darea.connect("button-press-event", self.on_button_press)
         self.darea.connect("button-release-event", self.on_button_release)
         self.darea.connect("motion-notify-event", self.on_motion)
         self.darea.connect("key-press-event", self.on_key_press)
         self.add(self.darea)
+        self._last_alloc_size = (0, 0)
 
         self.gfile_dir = Gio.File.new_for_path(str(DESKTOP_DIR))
         self.monitor = self.gfile_dir.monitor_directory(Gio.FileMonitorFlags.NONE, None)
@@ -289,6 +292,14 @@ class DesktopManager(Gtk.Window):
 
         self.reload_items()
         self.show_all()
+
+    def on_size_allocate(self, widget, allocation):
+        if allocation.width > 200 and allocation.height > 200:
+            new_size = (allocation.width, allocation.height)
+            if new_size != getattr(self, "_last_alloc_size", (0, 0)):
+                self._last_alloc_size = new_size
+                self.positions, self.folder_colors = self.load_state()
+                self.reload_items()
 
     def ensure_animation_loop(self):
         if self.anim_timer_id is None:
@@ -408,7 +419,7 @@ class DesktopManager(Gtk.Window):
                         return geom.width, geom.height
         except Exception:
             pass
-        return 1920, 1080
+        return 1536, 824
 
     def get_max_rows(self):
         _, h = self.get_screen_size()
@@ -433,11 +444,14 @@ class DesktopManager(Gtk.Window):
         occupied = set()
         new_items = []
         max_rows = self.get_max_rows()
+        max_cols = self.get_max_cols()
 
         unplaced = []
         for p in entries:
             if p.name in self.positions:
                 col, row = self.positions[p.name]
+                col = max(0, min(max_cols - 1, col))
+                row = max(0, min(max_rows - 1, row))
                 if (col, row) not in occupied and col >= 0 and row >= 0:
                     occupied.add((col, row))
                     new_items.append(DesktopItem(
@@ -957,10 +971,13 @@ class DesktopManager(Gtk.Window):
         )
         if ctx and self.primary_drag_item and self.primary_drag_item.pixbuf:
             Gtk.drag_set_icon_pixbuf(ctx, self.primary_drag_item.pixbuf, ICON_SIZE // 2, ICON_SIZE // 2)
+        elif not ctx:
+            self.external_dnd_active = False
 
     def on_leave_notify(self, widget, event):
         if self.is_dragging_icon and self.dragging_items and not self.external_dnd_active:
-            self.start_external_drag(event)
+            if event.mode == Gdk.CrossingMode.NORMAL:
+                self.start_external_drag(event)
         return False
 
     def on_drag_data_get(self, widget, drag_context, data, info, time):
