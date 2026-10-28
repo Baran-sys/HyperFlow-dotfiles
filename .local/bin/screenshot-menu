@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-HyprFlow Windows-Style Top Floating Snipping Tool Bar
-- Sleek floating pill centered at the top of the focused monitor.
-- Modes:
-    1. Rectangular Selection (Seçmeli Alan) [1 / R / A]
-    2. Window Capture (Pencere) [2 / W]
-    3. Fullscreen (Tam Ekran) [3 / F / S]
-    4. Delay Toggle (0s / 3s) [D]
-    5. Cancel / Dismiss [Esc]
+HyprFlow Windows-Style Top Floating Snipping & Screen Recording Tool Bar
+- Floating pill centered at the top of the focused monitor.
+- Screenshot Modes:
+    1. Rectangular Selection (Area) [1 / R / A]
+    2. Window Capture (Window) [2 / W]
+    3. Fullscreen (Screen) [3 / F / S]
+- Screen Recording:
+    4. Screen Recording (Record / Stop) [4 / V]
+    5. Settings Gear (Dropdown for Resolution, FPS & Target) [G / O]
+- Dismiss / Cancel [Esc / Q]
 - Theme: Catppuccin Mocha Glass (#1e1e2e / #cba6f7).
 """
 
@@ -19,19 +21,127 @@ import signal
 import subprocess
 import threading
 
-# Helper to run capture worker in background after GUI dismisses
+PID_FILE = "/tmp/screenrec.pid"
+META_FILE = "/tmp/screenrec.meta"
+LOCK_FILE = "/tmp/screenshot_menu.pid"
+SETTINGS_FILE = os.path.expanduser("~/.config/hypr/recording_settings.json")
+
+
+def load_settings():
+    defaults = {"resolution": "1080p", "fps": "60 FPS", "area": "Selection"}
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
+                data = json.load(f)
+                defaults.update(data)
+    except Exception:
+        pass
+    return defaults
+
+
+def save_settings(data):
+    try:
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
+def is_recording_active():
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                content = f.read().strip()
+            if content:
+                pid = int(content)
+                os.kill(pid, 0)
+                return pid
+        except Exception:
+            try:
+                os.remove(PID_FILE)
+            except Exception:
+                pass
+    return None
+
+
+def stop_recording():
+    pid = is_recording_active()
+    if not pid:
+        return False
+    try:
+        os.kill(pid, signal.SIGINT)
+    except Exception:
+        pass
+
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+            time.sleep(0.05)
+        except Exception:
+            break
+
+    filepath = None
+    filename = None
+    if os.path.exists(META_FILE):
+        try:
+            with open(META_FILE, "r") as f:
+                meta = json.load(f)
+                filepath = meta.get("filepath")
+                filename = meta.get("filename")
+        except Exception:
+            pass
+        try:
+            os.remove(META_FILE)
+        except Exception:
+            pass
+
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+    except Exception:
+        pass
+
+    if filepath and os.path.exists(filepath):
+        try:
+            proc = subprocess.Popen([
+                "notify-send",
+                "-a", "Screen Recorder",
+                "-i", "video-x-generic",
+                "-A", "open=Open Video",
+                "Recording Saved",
+                f"Saved to {filename or os.path.basename(filepath)}"
+            ], stdout=subprocess.PIPE, text=True)
+
+            def _open_action(p, fp):
+                try:
+                    out, _ = p.communicate(timeout=10)
+                    if "open" in (out or ""):
+                        subprocess.Popen(["xdg-open", fp])
+                except Exception:
+                    pass
+
+            threading.Thread(target=_open_action, args=(proc, filepath), daemon=True).start()
+        except Exception:
+            pass
+    return True
+
+
+# ==============================================================================
+# Background CLI Workers
+# ==============================================================================
+
+if len(sys.argv) > 1 and sys.argv[1] == "--stop-rec":
+    stop_recording()
+    sys.exit(0)
+
 if len(sys.argv) > 1 and sys.argv[1] == "--capture":
     mode = sys.argv[2] if len(sys.argv) > 2 else "area"
-    delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
-
-    # Wait for the overlay bar to vanish completely from the screen
     time.sleep(0.18)
-    if delay > 0:
-        time.sleep(delay)
 
-    # Prepare save destination
-    save_dir = os.path.expanduser("~/Resimler/Screenshots")
-    if not os.path.exists(save_dir):
+    if os.path.exists(os.path.expanduser("~/Resimler")):
+        save_dir = os.path.expanduser("~/Resimler/Screenshots")
+    else:
         save_dir = os.path.expanduser("~/Pictures/Screenshots")
     os.makedirs(save_dir, exist_ok=True)
 
@@ -40,7 +150,6 @@ if len(sys.argv) > 1 and sys.argv[1] == "--capture":
 
     geom = None
     if mode == "area":
-        # Interactive rectangular selection
         slurp_cmd = [
             "slurp", "-d",
             "-b", "#1e1e2e55",
@@ -53,7 +162,6 @@ if len(sys.argv) > 1 and sys.argv[1] == "--capture":
         if not geom:
             sys.exit(0)
     elif mode == "window":
-        # Interactive window picker: restrict to current workspace window boxes
         try:
             ws_res = subprocess.check_output(["hyprctl", "activeworkspace", "-j"]).decode()
             active_ws_id = json.loads(ws_res).get("id")
@@ -85,45 +193,117 @@ if len(sys.argv) > 1 and sys.argv[1] == "--capture":
         if not geom:
             sys.exit(0)
 
-    # Capture image with grim
     if geom:
         capture_cmd = ["grim", "-g", geom, filepath]
     else:
-        # Fullscreen
         capture_cmd = ["grim", filepath]
 
     capture_res = subprocess.run(capture_cmd)
     if capture_res.returncode != 0 or not os.path.exists(filepath):
         sys.exit(1)
 
-    # Copy to clipboard
     try:
         with open(filepath, "rb") as f:
             subprocess.run(["wl-copy", "-t", "image/png"], stdin=f)
     except Exception:
         pass
 
-    # Send Dunst notification with thumbnail & action
     try:
-        proc = subprocess.Popen(
-            [
-                "notify-send",
-                "-a", "Screenshot",
-                "-i", filepath,
-                "-A", "open=Open",
-                "Screenshot Captured",
-                f"Saved to {filename}\nCopied to clipboard."
-            ],
-            stdout=subprocess.PIPE, text=True
-        )
-        try:
-            out, _ = proc.communicate(timeout=8)
-            if "open" in (out or ""):
-                subprocess.Popen(["xdg-open", filepath])
-        except Exception:
-            pass
+        proc = subprocess.Popen([
+            "notify-send",
+            "-a", "Screenshot",
+            "-i", filepath,
+            "-A", "open=Open",
+            "Screenshot Captured",
+            f"Saved to {filename}\nCopied to clipboard."
+        ], stdout=subprocess.PIPE, text=True)
+
+        def _open_shot(p, fp):
+            try:
+                out, _ = p.communicate(timeout=8)
+                if "open" in (out or ""):
+                    subprocess.Popen(["xdg-open", fp])
+            except Exception:
+                pass
+        threading.Thread(target=_open_shot, args=(proc, filepath), daemon=True).start()
     except Exception:
         subprocess.Popen(["notify-send", "-a", "Screenshot", "-i", filepath, "Screenshot Captured", f"Saved to {filename}"])
+
+    sys.exit(0)
+
+if len(sys.argv) > 1 and sys.argv[1] == "--record":
+    time.sleep(0.18)
+    settings = load_settings()
+    res_choice = settings.get("resolution", "1080p")
+    fps_choice = settings.get("fps", "60 FPS")
+    area_choice = settings.get("area", "Selection")
+
+    fps_num = 60 if "60" in str(fps_choice) else 30
+
+    if os.path.exists(os.path.expanduser("~/Videolar")):
+        save_dir = os.path.expanduser("~/Videolar/Recordings")
+    else:
+        save_dir = os.path.expanduser("~/Videos/Recordings")
+    os.makedirs(save_dir, exist_ok=True)
+
+    filename = time.strftime("Recording_%Y%m%d_%H%M%S.mp4")
+    filepath = os.path.join(save_dir, filename)
+
+    geom = None
+    if area_choice == "Selection":
+        slurp_cmd = [
+            "slurp", "-d",
+            "-b", "#1e1e2e55",
+            "-c", "#cba6f7ff",
+            "-s", "#cba6f733",
+            "-w", "2"
+        ]
+        res = subprocess.run(slurp_cmd, capture_output=True, text=True)
+        geom = res.stdout.strip()
+        if not geom:
+            sys.exit(0)
+
+    cmd = ["wf-recorder"]
+    if geom:
+        cmd.extend(["-g", geom])
+    cmd.extend(["-r", str(fps_num)])
+
+    if res_choice == "720p":
+        cmd.extend(["-F", "scale=-2:720"])
+    elif res_choice == "480p":
+        cmd.extend(["-F", "scale=-2:480"])
+    elif res_choice == "1080p" and not geom:
+        cmd.extend(["-F", "scale=-2:1080"])
+
+    cmd.extend(["-f", filepath])
+
+    try:
+        proc = subprocess.Popen(cmd)
+        with open(PID_FILE, "w") as f:
+            f.write(str(proc.pid))
+        with open(META_FILE, "w") as f:
+            json.dump({"filepath": filepath, "filename": filename, "pid": proc.pid}, f)
+
+        notify_proc = subprocess.Popen([
+            "notify-send",
+            "-a", "Screen Recorder",
+            "-i", "media-record",
+            "-A", "stop=Stop Recording",
+            "Recording Started",
+            f"Format: {res_choice} @ {fps_num}fps\nClick 'Stop Recording' or press PrintScreen to finish."
+        ], stdout=subprocess.PIPE, text=True)
+
+        def _watch_notify(np, rp):
+            try:
+                out, _ = np.communicate()
+                if "stop" in (out or ""):
+                    stop_recording()
+            except Exception:
+                pass
+        threading.Thread(target=_watch_notify, args=(notify_proc, proc), daemon=True).start()
+    except Exception as e:
+        subprocess.Popen(["notify-send", "-a", "Screen Recorder", "Recording Failed", str(e)])
+        sys.exit(1)
 
     sys.exit(0)
 
@@ -137,7 +317,6 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('GtkLayerShell', '0.1')
 from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
 
-LOCK_FILE = "/tmp/screenshot_menu.pid"
 
 def toggle_or_lock():
     my_pid = os.getpid()
@@ -150,7 +329,6 @@ def toggle_or_lock():
                 if old_pid != my_pid:
                     try:
                         os.kill(old_pid, 0)
-                        # Process is running: toggle off
                         os.kill(old_pid, signal.SIGTERM)
                         try:
                             os.remove(LOCK_FILE)
@@ -183,12 +361,13 @@ def toggle_or_lock():
         sys.exit(0)
     signal.signal(signal.SIGTERM, _sigterm_handler)
 
+
 toggle_or_lock()
 
 CSS_STYLE = b"""
 * {
     font-family: 'JetBrainsMono Nerd Font', monospace;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 window {
@@ -196,21 +375,21 @@ window {
 }
 
 .snipping-pill {
-    background-color: rgba(24, 24, 37, 0.94);
+    background-color: rgba(24, 24, 37, 0.96);
     border: 1.5px solid rgba(203, 166, 247, 0.45);
-    border-radius: 24px;
-    padding: 4px 6px;
+    border-radius: 20px;
+    padding: 6px 10px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
 }
 
 .snip-btn {
     background-color: transparent;
     border: 1px solid transparent;
-    border-radius: 16px;
+    border-radius: 14px;
     padding: 6px 12px;
     margin: 0 2px;
     color: #cdd6f4;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 500;
     transition: all 120ms ease;
 }
@@ -221,10 +400,22 @@ window {
     border-color: rgba(203, 166, 247, 0.3);
 }
 
-.snip-btn:active, .snip-btn.active {
+.snip-btn.active {
     background-color: rgba(203, 166, 247, 0.25);
     border-color: #cba6f7;
     color: #cba6f7;
+}
+
+.snip-btn.rec-btn:hover {
+    background-color: rgba(243, 139, 168, 0.22);
+    border-color: rgba(243, 139, 168, 0.4);
+    color: #f38ba8;
+}
+
+.snip-btn.rec-active {
+    background-color: rgba(243, 139, 168, 0.28);
+    border-color: #f38ba8;
+    color: #f38ba8;
 }
 
 .snip-btn.close-btn:hover {
@@ -236,14 +427,43 @@ window {
 .snip-sep {
     background-color: #313244;
     min-width: 1px;
-    margin: 6px 4px;
+    margin: 4px 6px;
 }
 
-.snip-label {
-    font-size: 12px;
-    margin-left: 4px;
+.dropdown-panel {
+    background-color: rgba(30, 30, 46, 0.98);
+    border-top: 1px solid #313244;
+    border-radius: 0 0 14px 14px;
+    margin-top: 6px;
+    padding: 8px 6px 4px 6px;
+}
+
+.option-label {
+    color: #a6adc8;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 85px;
+}
+
+.choice-btn {
+    background-color: #252538;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    padding: 3px 10px;
+    margin: 0 2px;
+    font-size: 11px;
+    transition: all 120ms ease;
+}
+
+.choice-btn:checked {
+    background-color: rgba(203, 166, 247, 0.25);
+    border-color: #cba6f7;
+    color: #cba6f7;
+    font-weight: bold;
 }
 """
+
 
 class SnippingBar(Gtk.Window):
     def __init__(self):
@@ -251,7 +471,6 @@ class SnippingBar(Gtk.Window):
         self.set_title("Snipping Tool")
         self.set_resizable(False)
 
-        # Initialize GtkLayerShell
         GtkLayerShell.init_for_window(self)
         GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
         GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
@@ -259,7 +478,6 @@ class SnippingBar(Gtk.Window):
         GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.EXCLUSIVE)
         self.connect("destroy", Gtk.main_quit)
 
-        # Apply CSS
         provider = Gtk.CssProvider()
         provider.load_from_data(CSS_STYLE)
         Gtk.StyleContext.add_provider_for_screen(
@@ -268,12 +486,15 @@ class SnippingBar(Gtk.Window):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        self.delay = 0
+        self.settings = load_settings()
+        recording_pid = is_recording_active()
 
-        # Main horizontal pill container
-        self.main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        self.main_box.get_style_context().add_class("snipping-pill")
-        self.add(self.main_box)
+        self.main_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.main_container.get_style_context().add_class("snipping-pill")
+        self.add(self.main_container)
+
+        self.top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self.main_container.pack_start(self.top_row, False, False, 0)
 
         # 1. Rectangle (Area) Button
         self.btn_area = Gtk.Button()
@@ -282,13 +503,12 @@ class SnippingBar(Gtk.Window):
         lbl_icon_area = Gtk.Label()
         lbl_icon_area.set_markup("<span font='16px'>󰒅</span>")
         lbl_text_area = Gtk.Label(label="Area")
-        lbl_text_area.get_style_context().add_class("snip-label")
         box_area.pack_start(lbl_icon_area, False, False, 0)
         box_area.pack_start(lbl_text_area, False, False, 0)
         self.btn_area.add(box_area)
         self.btn_area.set_tooltip_text("Rectangular Selection [1 / R / A]")
         self.btn_area.connect("clicked", lambda b: self.trigger_capture("area"))
-        self.main_box.pack_start(self.btn_area, False, False, 0)
+        self.top_row.pack_start(self.btn_area, False, False, 0)
 
         # 2. Window Button
         self.btn_window = Gtk.Button()
@@ -297,13 +517,12 @@ class SnippingBar(Gtk.Window):
         lbl_icon_win = Gtk.Label()
         lbl_icon_win.set_markup("<span font='16px'>󰖲</span>")
         lbl_text_win = Gtk.Label(label="Window")
-        lbl_text_win.get_style_context().add_class("snip-label")
         box_win.pack_start(lbl_icon_win, False, False, 0)
         box_win.pack_start(lbl_text_win, False, False, 0)
         self.btn_window.add(box_win)
         self.btn_window.set_tooltip_text("Window Snip [2 / W]")
         self.btn_window.connect("clicked", lambda b: self.trigger_capture("window"))
-        self.main_box.pack_start(self.btn_window, False, False, 0)
+        self.top_row.pack_start(self.btn_window, False, False, 0)
 
         # 3. Fullscreen Button
         self.btn_screen = Gtk.Button()
@@ -312,40 +531,59 @@ class SnippingBar(Gtk.Window):
         lbl_icon_screen = Gtk.Label()
         lbl_icon_screen.set_markup("<span font='16px'>󰹑</span>")
         lbl_text_screen = Gtk.Label(label="Screen")
-        lbl_text_screen.get_style_context().add_class("snip-label")
         box_screen.pack_start(lbl_icon_screen, False, False, 0)
         box_screen.pack_start(lbl_text_screen, False, False, 0)
         self.btn_screen.add(box_screen)
         self.btn_screen.set_tooltip_text("Full Screen Snip [3 / F / S]")
         self.btn_screen.connect("clicked", lambda b: self.trigger_capture("screen"))
-        self.main_box.pack_start(self.btn_screen, False, False, 0)
+        self.top_row.pack_start(self.btn_screen, False, False, 0)
 
         # Separator 1
         sep1 = Gtk.Box()
         sep1.get_style_context().add_class("snip-sep")
-        self.main_box.pack_start(sep1, False, False, 2)
+        self.top_row.pack_start(sep1, False, False, 2)
 
-        # 4. Timer Delay Button
-        self.btn_delay = Gtk.Button()
-        self.btn_delay.get_style_context().add_class("snip-btn")
-        self.box_delay = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_icon_delay = Gtk.Label()
-        lbl_icon_delay.set_markup("<span font='16px'>󰔟</span>")
-        self.lbl_text_delay = Gtk.Label(label="0s")
-        self.lbl_text_delay.get_style_context().add_class("snip-label")
-        self.box_delay.pack_start(lbl_icon_delay, False, False, 0)
-        self.box_delay.pack_start(self.lbl_text_delay, False, False, 0)
-        self.btn_delay.add(self.box_delay)
-        self.btn_delay.set_tooltip_text("Timer Delay (Toggle 0s / 3s) [D]")
-        self.btn_delay.connect("clicked", lambda b: self.toggle_delay())
-        self.main_box.pack_start(self.btn_delay, False, False, 0)
+        # 4. Record Button (or Stop Recording if active)
+        self.btn_record = Gtk.Button()
+        self.btn_record.get_style_context().add_class("snip-btn")
+        box_rec = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.lbl_icon_rec = Gtk.Label()
+        self.lbl_text_rec = Gtk.Label()
+        box_rec.pack_start(self.lbl_icon_rec, False, False, 0)
+        box_rec.pack_start(self.lbl_text_rec, False, False, 0)
+        self.btn_record.add(box_rec)
+
+        if recording_pid:
+            self.lbl_icon_rec.set_markup("<span font='16px'>󰙦</span>")
+            self.lbl_text_rec.set_text("Stop")
+            self.btn_record.get_style_context().add_class("rec-active")
+            self.btn_record.set_tooltip_text("Stop Active Recording [4 / V]")
+            self.btn_record.connect("clicked", lambda b: self.trigger_stop_rec())
+        else:
+            self.lbl_icon_rec.set_markup("<span font='16px'></span>")
+            self.lbl_text_rec.set_text("Record")
+            self.btn_record.get_style_context().add_class("rec-btn")
+            self.btn_record.set_tooltip_text("Start Screen Recording [4 / V]")
+            self.btn_record.connect("clicked", lambda b: self.trigger_start_rec())
+
+        self.top_row.pack_start(self.btn_record, False, False, 0)
+
+        # 5. Settings Gear Button
+        self.btn_gear = Gtk.Button()
+        self.btn_gear.get_style_context().add_class("snip-btn")
+        lbl_gear = Gtk.Label()
+        lbl_gear.set_markup("<span font='16px'>󰒓</span>")
+        self.btn_gear.add(lbl_gear)
+        self.btn_gear.set_tooltip_text("Recording Settings (Resolution & FPS) [G / O]")
+        self.btn_gear.connect("clicked", lambda b: self.toggle_settings_dropdown())
+        self.top_row.pack_start(self.btn_gear, False, False, 0)
 
         # Separator 2
         sep2 = Gtk.Box()
         sep2.get_style_context().add_class("snip-sep")
-        self.main_box.pack_start(sep2, False, False, 2)
+        self.top_row.pack_start(sep2, False, False, 2)
 
-        # 5. Close / Cancel Button
+        # 6. Close / Cancel Button
         self.btn_close = Gtk.Button()
         self.btn_close.get_style_context().add_class("snip-btn")
         self.btn_close.get_style_context().add_class("close-btn")
@@ -354,20 +592,100 @@ class SnippingBar(Gtk.Window):
         self.btn_close.add(lbl_icon_close)
         self.btn_close.set_tooltip_text("Cancel [Esc]")
         self.btn_close.connect("clicked", lambda b: self.destroy())
-        self.main_box.pack_start(self.btn_close, False, False, 0)
+        self.top_row.pack_start(self.btn_close, False, False, 0)
 
-        # Keyboard events
+        # 7. Dropdown Panel (Revealer)
+        self.revealer = Gtk.Revealer()
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.revealer.set_reveal_child(False)
+        self.main_container.pack_start(self.revealer, False, False, 0)
+
+        self.panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.panel.get_style_context().add_class("dropdown-panel")
+        self.revealer.add(self.panel)
+
+        # Resolution Row
+        row_res = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_res = Gtk.Label(label="Resolution:")
+        lbl_res.get_style_context().add_class("option-label")
+        row_res.pack_start(lbl_res, False, False, 0)
+        group_res = None
+        for res_val in ["1080p", "720p", "480p"]:
+            rb = Gtk.RadioButton.new_with_label_from_widget(group_res, res_val)
+            group_res = rb
+            rb.set_mode(False)
+            rb.get_style_context().add_class("choice-btn")
+            if self.settings.get("resolution") == res_val:
+                rb.set_active(True)
+            rb.connect("toggled", self.make_res_callback(res_val))
+            row_res.pack_start(rb, False, False, 0)
+        self.panel.pack_start(row_res, False, False, 0)
+
+        # FPS Row
+        row_fps = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_fps = Gtk.Label(label="Framerate: ")
+        lbl_fps.get_style_context().add_class("option-label")
+        row_fps.pack_start(lbl_fps, False, False, 0)
+        group_fps = None
+        for fps_val in ["60 FPS", "30 FPS"]:
+            rb = Gtk.RadioButton.new_with_label_from_widget(group_fps, fps_val)
+            group_fps = rb
+            rb.set_mode(False)
+            rb.get_style_context().add_class("choice-btn")
+            if self.settings.get("fps") == fps_val:
+                rb.set_active(True)
+            rb.connect("toggled", self.make_fps_callback(fps_val))
+            row_fps.pack_start(rb, False, False, 0)
+        self.panel.pack_start(row_fps, False, False, 0)
+
+        # Target Area Row
+        row_area = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_area = Gtk.Label(label="Capture:   ")
+        lbl_area.get_style_context().add_class("option-label")
+        row_area.pack_start(lbl_area, False, False, 0)
+        group_area = None
+        for area_val in ["Selection", "Fullscreen"]:
+            rb = Gtk.RadioButton.new_with_label_from_widget(group_area, area_val)
+            group_area = rb
+            rb.set_mode(False)
+            rb.get_style_context().add_class("choice-btn")
+            if self.settings.get("area") == area_val:
+                rb.set_active(True)
+            rb.connect("toggled", self.make_area_callback(area_val))
+            row_area.pack_start(rb, False, False, 0)
+        self.panel.pack_start(row_area, False, False, 0)
+
+        # Keyboard event
         self.connect("key-press-event", self.on_key_press)
 
-    def toggle_delay(self):
-        if self.delay == 0:
-            self.delay = 3
-            self.lbl_text_delay.set_text("3s")
-            self.btn_delay.get_style_context().add_class("active")
+    def toggle_settings_dropdown(self):
+        cur = self.revealer.get_reveal_child()
+        self.revealer.set_reveal_child(not cur)
+        if not cur:
+            self.btn_gear.get_style_context().add_class("active")
         else:
-            self.delay = 0
-            self.lbl_text_delay.set_text("0s")
-            self.btn_delay.get_style_context().remove_class("active")
+            self.btn_gear.get_style_context().remove_class("active")
+
+    def make_res_callback(self, val):
+        def _cb(widget):
+            if widget.get_active():
+                self.settings["resolution"] = val
+                save_settings(self.settings)
+        return _cb
+
+    def make_fps_callback(self, val):
+        def _cb(widget):
+            if widget.get_active():
+                self.settings["fps"] = val
+                save_settings(self.settings)
+        return _cb
+
+    def make_area_callback(self, val):
+        def _cb(widget):
+            if widget.get_active():
+                self.settings["area"] = val
+                save_settings(self.settings)
+        return _cb
 
     def on_key_press(self, widget, event):
         kv = event.keyval
@@ -383,21 +701,42 @@ class SnippingBar(Gtk.Window):
         elif kv in (Gdk.KEY_3, Gdk.KEY_f, Gdk.KEY_F, Gdk.KEY_s, Gdk.KEY_S):
             self.trigger_capture("screen")
             return True
-        elif kv in (Gdk.KEY_d, Gdk.KEY_D):
-            self.toggle_delay()
+        elif kv in (Gdk.KEY_4, Gdk.KEY_v, Gdk.KEY_V):
+            if is_recording_active():
+                self.trigger_stop_rec()
+            else:
+                self.trigger_start_rec()
+            return True
+        elif kv in (Gdk.KEY_g, Gdk.KEY_G, Gdk.KEY_o, Gdk.KEY_O):
+            self.toggle_settings_dropdown()
             return True
         return False
 
     def trigger_capture(self, mode):
-        delay = self.delay
-        # Immediately destroy window so it does not appear in the screenshot
         self.hide()
         self.destroy()
         while Gtk.events_pending():
             Gtk.main_iteration()
 
-        # Detached worker process handles sleep, slurp, grim & notification
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--capture", mode, str(delay)])
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--capture", mode])
+        sys.exit(0)
+
+    def trigger_start_rec(self):
+        self.hide()
+        self.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--record"])
+        sys.exit(0)
+
+    def trigger_stop_rec(self):
+        self.hide()
+        self.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        stop_recording()
         sys.exit(0)
 
 
@@ -405,6 +744,7 @@ def main():
     app = SnippingBar()
     app.show_all()
     Gtk.main()
+
 
 if __name__ == "__main__":
     main()

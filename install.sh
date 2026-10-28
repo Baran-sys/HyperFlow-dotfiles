@@ -57,6 +57,7 @@ REQUIRED_PACKAGES=(
     ttf-jetbrains-mono-nerd
     grim
     slurp
+    wf-recorder
     wl-clipboard
     playerctl
     pamixer
