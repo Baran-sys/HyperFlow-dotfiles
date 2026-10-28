@@ -389,8 +389,6 @@ window {
     padding: 6px 12px;
     margin: 0 2px;
     color: #cdd6f4;
-    font-size: 14px;
-    font-weight: 500;
     transition: all 120ms ease;
 }
 
@@ -398,6 +396,16 @@ window {
     background-color: #313244;
     color: #cba6f7;
     border-color: rgba(203, 166, 247, 0.3);
+}
+
+.snip-icon {
+    font-size: 16px;
+    min-width: 22px;
+}
+
+.snip-label {
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .snip-btn.active {
@@ -442,7 +450,7 @@ window {
     color: #a6adc8;
     font-size: 11px;
     font-weight: bold;
-    min-width: 85px;
+    min-width: 95px;
 }
 
 .choice-btn {
@@ -499,10 +507,13 @@ class SnippingBar(Gtk.Window):
         # 1. Rectangle (Area) Button
         self.btn_area = Gtk.Button()
         self.btn_area.get_style_context().add_class("snip-btn")
-        box_area = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_icon_area = Gtk.Label()
-        lbl_icon_area.set_markup("<span font='16px'>󰒅</span>")
+        box_area = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_icon_area = Gtk.Label(label="󰒅")
+        lbl_icon_area.get_style_context().add_class("snip-icon")
+        lbl_icon_area.set_size_request(22, -1)
+        lbl_icon_area.set_halign(Gtk.Align.CENTER)
         lbl_text_area = Gtk.Label(label="Area")
+        lbl_text_area.get_style_context().add_class("snip-label")
         box_area.pack_start(lbl_icon_area, False, False, 0)
         box_area.pack_start(lbl_text_area, False, False, 0)
         self.btn_area.add(box_area)
@@ -513,10 +524,13 @@ class SnippingBar(Gtk.Window):
         # 2. Window Button
         self.btn_window = Gtk.Button()
         self.btn_window.get_style_context().add_class("snip-btn")
-        box_win = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_icon_win = Gtk.Label()
-        lbl_icon_win.set_markup("<span font='16px'>󰖲</span>")
+        box_win = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_icon_win = Gtk.Label(label="󰖲")
+        lbl_icon_win.get_style_context().add_class("snip-icon")
+        lbl_icon_win.set_size_request(22, -1)
+        lbl_icon_win.set_halign(Gtk.Align.CENTER)
         lbl_text_win = Gtk.Label(label="Window")
+        lbl_text_win.get_style_context().add_class("snip-label")
         box_win.pack_start(lbl_icon_win, False, False, 0)
         box_win.pack_start(lbl_text_win, False, False, 0)
         self.btn_window.add(box_win)
@@ -527,10 +541,13 @@ class SnippingBar(Gtk.Window):
         # 3. Fullscreen Button
         self.btn_screen = Gtk.Button()
         self.btn_screen.get_style_context().add_class("snip-btn")
-        box_screen = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_icon_screen = Gtk.Label()
-        lbl_icon_screen.set_markup("<span font='16px'>󰹑</span>")
+        box_screen = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_icon_screen = Gtk.Label(label="󰹑")
+        lbl_icon_screen.get_style_context().add_class("snip-icon")
+        lbl_icon_screen.set_size_request(22, -1)
+        lbl_icon_screen.set_halign(Gtk.Align.CENTER)
         lbl_text_screen = Gtk.Label(label="Screen")
+        lbl_text_screen.get_style_context().add_class("snip-label")
         box_screen.pack_start(lbl_icon_screen, False, False, 0)
         box_screen.pack_start(lbl_text_screen, False, False, 0)
         self.btn_screen.add(box_screen)
@@ -546,21 +563,25 @@ class SnippingBar(Gtk.Window):
         # 4. Record Button (or Stop Recording if active)
         self.btn_record = Gtk.Button()
         self.btn_record.get_style_context().add_class("snip-btn")
-        box_rec = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        box_rec = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.lbl_icon_rec = Gtk.Label()
+        self.lbl_icon_rec.get_style_context().add_class("snip-icon")
+        self.lbl_icon_rec.set_size_request(22, -1)
+        self.lbl_icon_rec.set_halign(Gtk.Align.CENTER)
         self.lbl_text_rec = Gtk.Label()
+        self.lbl_text_rec.get_style_context().add_class("snip-label")
         box_rec.pack_start(self.lbl_icon_rec, False, False, 0)
         box_rec.pack_start(self.lbl_text_rec, False, False, 0)
         self.btn_record.add(box_rec)
 
         if recording_pid:
-            self.lbl_icon_rec.set_markup("<span font='16px'>󰙦</span>")
+            self.lbl_icon_rec.set_text("󰙦")
             self.lbl_text_rec.set_text("Stop")
             self.btn_record.get_style_context().add_class("rec-active")
             self.btn_record.set_tooltip_text("Stop Active Recording [4 / V]")
             self.btn_record.connect("clicked", lambda b: self.trigger_stop_rec())
         else:
-            self.lbl_icon_rec.set_markup("<span font='16px'></span>")
+            self.lbl_icon_rec.set_text("󰕧")
             self.lbl_text_rec.set_text("Record")
             self.btn_record.get_style_context().add_class("rec-btn")
             self.btn_record.set_tooltip_text("Start Screen Recording [4 / V]")
@@ -571,8 +592,10 @@ class SnippingBar(Gtk.Window):
         # 5. Settings Gear Button
         self.btn_gear = Gtk.Button()
         self.btn_gear.get_style_context().add_class("snip-btn")
-        lbl_gear = Gtk.Label()
-        lbl_gear.set_markup("<span font='16px'>󰒓</span>")
+        lbl_gear = Gtk.Label(label="󰒓")
+        lbl_gear.get_style_context().add_class("snip-icon")
+        lbl_gear.set_size_request(22, -1)
+        lbl_gear.set_halign(Gtk.Align.CENTER)
         self.btn_gear.add(lbl_gear)
         self.btn_gear.set_tooltip_text("Recording Settings (Resolution & FPS) [G / O]")
         self.btn_gear.connect("clicked", lambda b: self.toggle_settings_dropdown())
@@ -587,8 +610,10 @@ class SnippingBar(Gtk.Window):
         self.btn_close = Gtk.Button()
         self.btn_close.get_style_context().add_class("snip-btn")
         self.btn_close.get_style_context().add_class("close-btn")
-        lbl_icon_close = Gtk.Label()
-        lbl_icon_close.set_markup("<span font='16px'>󰅖</span>")
+        lbl_icon_close = Gtk.Label(label="󰅖")
+        lbl_icon_close.get_style_context().add_class("snip-icon")
+        lbl_icon_close.set_size_request(22, -1)
+        lbl_icon_close.set_halign(Gtk.Align.CENTER)
         self.btn_close.add(lbl_icon_close)
         self.btn_close.set_tooltip_text("Cancel [Esc]")
         self.btn_close.connect("clicked", lambda b: self.destroy())
@@ -607,6 +632,7 @@ class SnippingBar(Gtk.Window):
         # Resolution Row
         row_res = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         lbl_res = Gtk.Label(label="Resolution:")
+        lbl_res.set_xalign(0.0)
         lbl_res.get_style_context().add_class("option-label")
         row_res.pack_start(lbl_res, False, False, 0)
         group_res = None
@@ -623,7 +649,8 @@ class SnippingBar(Gtk.Window):
 
         # FPS Row
         row_fps = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_fps = Gtk.Label(label="Framerate: ")
+        lbl_fps = Gtk.Label(label="Framerate:")
+        lbl_fps.set_xalign(0.0)
         lbl_fps.get_style_context().add_class("option-label")
         row_fps.pack_start(lbl_fps, False, False, 0)
         group_fps = None
@@ -640,7 +667,8 @@ class SnippingBar(Gtk.Window):
 
         # Target Area Row
         row_area = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        lbl_area = Gtk.Label(label="Capture:   ")
+        lbl_area = Gtk.Label(label="Capture:")
+        lbl_area.set_xalign(0.0)
         lbl_area.get_style_context().add_class("option-label")
         row_area.pack_start(lbl_area, False, False, 0)
         group_area = None
