@@ -59,6 +59,7 @@ def fast_toggle_or_lock(app_name):
                         os.remove(closed_file)
                     except Exception:
                         pass
+                    release_focus_lock(my_pid)
                     sys.exit(0)
         except Exception:
             pass
@@ -87,12 +88,23 @@ def fast_toggle_or_lock(app_name):
                                 os.remove(lock_file)
                             except Exception:
                                 pass
+                            release_focus_lock(my_pid)
                             sys.exit(0)
                         except ProcessLookupError:
                             # Process is dead, stale lockfile
                             pass
         except Exception:
             pass
+
+    # Write our own PID first so other applets know we are running
+    try:
+        with open(lock_file, "w") as f:
+            f.write(str(my_pid))
+    except Exception:
+        pass
+
+    # Acquire focus lock (input:follow_mouse 0) immediately
+    acquire_focus_lock(my_pid)
 
     # Close any OTHER running Waybar applets so only one applet is open at a time
     try:
@@ -116,13 +128,6 @@ def fast_toggle_or_lock(app_name):
     except Exception:
         pass
 
-    # Write our own PID
-    try:
-        with open(lock_file, "w") as f:
-            f.write(str(my_pid))
-    except Exception:
-        pass
-
     # Clean up lockfile on exit
     def _remove_lock():
         record_closed(app_name)
@@ -133,6 +138,7 @@ def fast_toggle_or_lock(app_name):
                         os.remove(lock_file)
         except Exception:
             pass
+        release_focus_lock(my_pid)
 
     atexit.register(_remove_lock)
 
@@ -162,11 +168,24 @@ def is_any_other_applet_running(my_pid=None):
         pass
     return False
 
-def acquire_focus_lock():
-    pass
+def acquire_focus_lock(my_pid=None):
+    if my_pid is None:
+        my_pid = os.getpid()
+    try:
+        subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if my_pid:
+            subprocess.Popen(["hyprctl", "dispatch", "focuswindow", f"pid:{my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 def release_focus_lock(my_pid=None):
-    pass
+    if my_pid is None:
+        my_pid = os.getpid()
+    if not is_any_other_applet_running(my_pid):
+        try:
+            subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 
 class SmartFocus:
     @classmethod
@@ -209,6 +228,8 @@ class SmartFocus:
         cleaned_up = [False]
         my_pid = os.getpid()
 
+        acquire_focus_lock(my_pid)
+
         # Calculate coordinates dynamically if align is specified
         if align is not None:
             w, h = window.get_size()
@@ -223,20 +244,22 @@ class SmartFocus:
                     subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception:
                     pass
+                release_focus_lock(my_pid)
 
         window.connect("destroy", _cleanup)
         atexit.register(_cleanup)
 
-        # Handle SIGTERM
+        # Handle SIGTERM & SIGINT
         try:
             orig_sigterm = signal.getsignal(signal.SIGTERM)
-            def _on_sigterm(signum, frame):
+            def _on_signal(signum, frame):
                 _cleanup()
-                if callable(orig_sigterm):
+                if signum == signal.SIGTERM and callable(orig_sigterm):
                     orig_sigterm(signum, frame)
                 else:
                     sys.exit(0)
-            signal.signal(signal.SIGTERM, _on_sigterm)
+            signal.signal(signal.SIGTERM, _on_signal)
+            signal.signal(signal.SIGINT, _on_signal)
         except Exception:
             pass
 
@@ -301,6 +324,7 @@ class SmartFocus:
             try:
                 subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:272,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:273,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(["hyprctl", "dispatch", "focuswindow", f"pid:{my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
             return False
