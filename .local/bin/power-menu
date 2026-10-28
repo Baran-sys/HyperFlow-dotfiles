@@ -61,6 +61,18 @@ headerbar button:hover {
     color: #ffffff;
 }
 
+headerbar button.btn-caffeine-active {
+    background: rgba(203, 166, 247, 0.22);
+    color: #cba6f7;
+    border: 1px solid #cba6f7;
+}
+
+headerbar button.btn-caffeine-active:hover {
+    background: rgba(203, 166, 247, 0.35);
+    color: #cba6f7;
+    border-color: #cba6f7;
+}
+
 .battery-card {
     background: #252538;
     border: 1px solid #313244;
@@ -103,41 +115,6 @@ row {
 row:hover {
     background-color: #313244;
     border: 1px solid #45475a;
-}
-
-.caffeine-card {
-    background: #252538;
-    border: 1px solid #313244;
-    border-radius: 12px;
-    margin: 2px 10px 4px 10px;
-    padding: 8px 12px;
-}
-
-.btn-caffeine {
-    background: #313244;
-    color: #cdd6f4;
-    border-radius: 6px;
-    border: 1px solid #45475a;
-    padding: 4px 12px;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-.btn-caffeine:hover {
-    background: #45475a;
-    color: #ffffff;
-}
-
-.btn-caffeine-active {
-    background: rgba(203, 166, 247, 0.20);
-    color: #cba6f7;
-    border: 1px solid #cba6f7;
-}
-
-.btn-caffeine-active:hover {
-    background: rgba(203, 166, 247, 0.30);
-    color: #cba6f7;
-    border-color: #cba6f7;
 }
 
 .profile-active {
@@ -291,8 +268,14 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         # HeaderBar
         self.header = Gtk.HeaderBar()
         self.header.set_show_close_button(True)
-        self.header.set_title("Power & Display Profiles")
+        self.header.set_title("Power & Display")
         self.set_titlebar(self.header)
+
+        # Compact Caffeine toggle button on top-left
+        self.btn_caff_toggle = Gtk.Button()
+        self.btn_caff_toggle.get_style_context().add_class("btn-caffeine")
+        self.btn_caff_toggle.connect("clicked", lambda b: self.toggle_caffeine())
+        self.header.pack_start(self.btn_caff_toggle)
 
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -327,34 +310,6 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         card.pack_start(self.lbl_health, False, False, 0)
 
         content_box.pack_start(card, False, False, 0)
-
-        # Caffeine Card / Row
-        caff_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        caff_card.get_style_context().add_class("caffeine-card")
-
-        lbl_caff_icon = Gtk.Label()
-        lbl_caff_icon.set_markup("<span font_family='JetBrainsMono Nerd Font' font='16'></span>")
-        lbl_caff_icon.set_valign(Gtk.Align.CENTER)
-        caff_card.pack_start(lbl_caff_icon, False, False, 0)
-
-        vbox_caff = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        lbl_caff_title = Gtk.Label()
-        lbl_caff_title.set_markup("<b>Caffeine Mode</b>")
-        lbl_caff_title.set_halign(Gtk.Align.START)
-        vbox_caff.pack_start(lbl_caff_title, False, False, 0)
-
-        self.lbl_caff_desc = Gtk.Label()
-        self.lbl_caff_desc.set_halign(Gtk.Align.START)
-        vbox_caff.pack_start(self.lbl_caff_desc, False, False, 0)
-        caff_card.pack_start(vbox_caff, True, True, 0)
-
-        self.btn_caff_toggle = Gtk.Button(label="Off")
-        self.btn_caff_toggle.get_style_context().add_class("btn-caffeine")
-        self.btn_caff_toggle.set_valign(Gtk.Align.CENTER)
-        self.btn_caff_toggle.connect("clicked", lambda b: self.toggle_caffeine())
-        caff_card.pack_end(self.btn_caff_toggle, False, False, 0)
-
-        content_box.pack_start(caff_card, False, False, 0)
 
         # 1. Section: Display Refresh Rate
         lbl_hz_title = Gtk.Label(label="DISPLAY REFRESH RATE (HZ)")
@@ -749,15 +704,15 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         active = self.is_caffeine_active()
         ctx = self.btn_caff_toggle.get_style_context()
         if active:
-            self.btn_caff_toggle.set_label("Active")
+            self.btn_caff_toggle.set_label(" Caffeine")
             if not ctx.has_class("btn-caffeine-active"):
                 ctx.add_class("btn-caffeine-active")
-            self.lbl_caff_desc.set_markup("<small><span alpha='65%'>Screen sleep & lock are suspended</span></small>")
+            self.btn_caff_toggle.set_tooltip_text("Caffeine Active: Screen sleep inhibited (Click to turn off)")
         else:
-            self.btn_caff_toggle.set_label("Off")
+            self.btn_caff_toggle.set_label(" Caffeine")
             if ctx.has_class("btn-caffeine-active"):
                 ctx.remove_class("btn-caffeine-active")
-            self.lbl_caff_desc.set_markup("<small><span alpha='65%'>Automatic screen sleep & power saving</span></small>")
+            self.btn_caff_toggle.set_tooltip_text("Caffeine Inactive: Normal power saving (Click to turn on)")
 
     def set_profile(self, profile_id):
         def _apply_prof():
