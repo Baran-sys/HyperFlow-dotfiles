@@ -22,15 +22,28 @@ SLURP_PID=$!
 ) &
 MONITOR_PID=$!
 
-# Run cliphist with rofi in spotlight style (capped at max 50 items)
-selected=$(cliphist list | head -n 50 | rofi -dmenu -p "󰅌 " -theme ~/.config/rofi/clipboard.rasi)
+# Read up to 50 items from cliphist
+mapfile -t raw_items < <(cliphist list | head -n 50)
+if [ ${#raw_items[@]} -eq 0 ]; then
+    kill "$SLURP_PID" "$MONITOR_PID" 2>/dev/null
+    exit 0
+fi
+
+# Strip the leading counter/ID (<id>\t) for clean display in rofi
+display_items=()
+for item in "${raw_items[@]}"; do
+    display_items+=("${item#*$'\t'}")
+done
+
+# Run rofi in spotlight style without leading numbers (-format i returns the selected item index)
+selected_idx=$(printf '%s\n' "${display_items[@]}" | rofi -dmenu -format i -p "󰅌 " -theme ~/.config/rofi/clipboard.rasi)
 rofi_status=$?
 
 # Cleanup
 kill "$SLURP_PID" "$MONITOR_PID" 2>/dev/null
 wait "$SLURP_PID" "$MONITOR_PID" 2>/dev/null
 
-# If an item was successfully selected, copy to clipboard
-if [ $rofi_status -eq 0 ] && [ -n "$selected" ]; then
-    echo "$selected" | cliphist decode | wl-copy
+# If an item was successfully selected, decode and copy to clipboard
+if [ $rofi_status -eq 0 ] && [[ "$selected_idx" =~ ^[0-9]+$ ]] && [ "$selected_idx" -lt "${#raw_items[@]}" ]; then
+    printf '%s\n' "${raw_items[$selected_idx]}" | cliphist decode | wl-copy
 fi

@@ -103,11 +103,11 @@ calendar:selected {
     background-color: #cba6f7;
     color: #11111b;
     font-weight: 800;
-    border-radius: 6px;
+    border-radius: 8px;
     border-top: 0px solid transparent;
-    border-bottom: 11px solid transparent;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 7px solid transparent;
+    border-right: 11px solid transparent;
 }
 
 calendar.header {
