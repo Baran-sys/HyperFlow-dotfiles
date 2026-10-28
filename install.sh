@@ -228,6 +228,15 @@ install_scripts_and_apps() {
         done
     fi
 
+    # Configure systemd-logind to let Hyprland handle the hardware power button if root access is available
+    if [ -d "/etc/systemd" ]; then
+        if sudo -n true 2>/dev/null; then
+            sudo mkdir -p /etc/systemd/logind.conf.d 2>/dev/null || true
+            printf "[Login]\nHandlePowerKey=ignore\nHandlePowerKeyLongPress=ignore\n" | sudo tee /etc/systemd/logind.conf.d/hyprflow-power.conf >/dev/null 2>&1 || true
+            echo -e "  ✓ systemd-logind power button override configured."
+        fi
+    fi
+
     # Ensure ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then
         echo -e "${YELLOW}WARNING: ~/.local/bin is not in your PATH environment variable.${NC}"

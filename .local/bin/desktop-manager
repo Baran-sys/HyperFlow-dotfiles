@@ -293,6 +293,7 @@ class DesktopManager(Gtk.Window):
         self.monitor.connect("changed", self.on_directory_changed)
 
         self.reload_items()
+        self._inhibit_system_power_key()
         self.show_all()
 
     def on_size_allocate(self, widget, allocation):
@@ -960,6 +961,31 @@ class DesktopManager(Gtk.Window):
                             os.remove(fpath)
                         except Exception:
                             pass
+        except Exception:
+            pass
+
+    def _inhibit_system_power_key(self):
+        """
+        Hold an inhibitor lock on systemd-logind's handle-power-key so that pressing
+        the hardware power button does not immediately shut down the machine.
+        Instead, Hyprland catches XF86PowerOff and opens the Waybar power menu.
+        """
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            res, fd_list = bus.call_with_unix_fd_list_sync(
+                "org.freedesktop.login1",
+                "/org/freedesktop/login1",
+                "org.freedesktop.login1.Manager",
+                "Inhibit",
+                GLib.Variant("(ssss)", ("handle-power-key", "HyprFlow", "Open power menu on power button", "block")),
+                None,
+                Gio.DBusCallFlags.NONE,
+                -1,
+                None,
+                None
+            )
+            if fd_list and fd_list.get_length() > 0:
+                self._power_inhibitor_fd = fd_list.get(0)
         except Exception:
             pass
 
