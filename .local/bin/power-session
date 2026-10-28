@@ -26,15 +26,17 @@ window {
 }
 
 .session-container {
-    padding: 10px 12px 6px 12px;
+    padding: 10px 10px 4px 10px;
 }
 
 .session-btn {
     background-color: #252538;
     border: 1px solid #313244;
     border-radius: 10px;
-    padding: 8px 12px;
-    margin: 0 3px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    margin: 0;
     color: #cdd6f4;
     transition: all 120ms ease;
 }
@@ -63,16 +65,12 @@ window {
 }
 
 .btn-icon {
-    font-size: 20px;
-}
-
-.btn-icon {
-    font-family: 'JetBrainsMono Nerd Font', 'Symbols Nerd Font', monospace;
-    font-size: 20px;
+    font-family: 'Symbols Nerd Font', 'JetBrainsMono Nerd Font', monospace;
+    font-size: 18px;
 }
 
 .status-bar {
-    padding: 2px 10px 8px 10px;
+    padding: 0 10px 8px 10px;
     color: #a6adc8;
     font-size: 11px;
 }
@@ -94,7 +92,7 @@ def get_uptime_str():
 class PowerSessionWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Power Session", application=app)
-        self.set_default_size(290, 102)
+        self.set_default_size(280, 88)
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
@@ -109,10 +107,10 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
         self.add(main_box)
 
         # Buttons Row
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_box.get_style_context().add_class("session-container")
         btn_box.set_halign(Gtk.Align.CENTER)
-        main_box.pack_start(btn_box, True, True, 0)
+        main_box.pack_start(btn_box, False, False, 0)
 
         # 1. Shut Down
         btn_shutdown = self.create_icon_button(
@@ -148,7 +146,7 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
 
         # 5. Log Out
         btn_logout = self.create_icon_button(
-            icon="",
+            icon="󰍃",
             tooltip="Log Out (O/E)",
             action=self.action_logout
         )
@@ -169,11 +167,16 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
         btn = Gtk.Button()
         btn.get_style_context().add_class("session-btn")
         btn.set_tooltip_text(tooltip)
+        btn.set_size_request(44, 44)
+        btn.set_halign(Gtk.Align.CENTER)
+        btn.set_valign(Gtk.Align.CENTER)
         btn.connect("clicked", lambda b: action())
 
         lbl_icon = Gtk.Label()
-        lbl_icon.set_markup(f"<span font_family='JetBrainsMono Nerd Font' font='18'>{icon}</span>")
+        lbl_icon.set_markup(f"<span font_family='Symbols Nerd Font' font='18'>{icon}</span>")
         lbl_icon.get_style_context().add_class("btn-icon")
+        lbl_icon.set_xalign(0.5)
+        lbl_icon.set_yalign(0.5)
         lbl_icon.set_valign(Gtk.Align.CENTER)
         lbl_icon.set_halign(Gtk.Align.CENTER)
         btn.add(lbl_icon)
