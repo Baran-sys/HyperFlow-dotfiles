@@ -1,0 +1,401 @@
+#!/usr/bin/env python3
+"""
+HyprFlow Windows-Style Top Floating Snipping Tool Bar
+- Sleek floating pill centered at the top of the focused monitor.
+- Modes:
+    1. Rectangular Selection (Seçmeli Alan) [1 / R / A]
+    2. Window Capture (Pencere) [2 / W]
+    3. Fullscreen (Tam Ekran) [3 / F / S]
+    4. Delay Toggle (0s / 3s) [D]
+    5. Cancel / Dismiss [Esc]
+- Theme: Catppuccin Mocha Glass (#1e1e2e / #cba6f7).
+"""
+
+import os
+import sys
+import time
+import json
+import signal
+import subprocess
+import threading
+
+# Helper to run capture worker in background after GUI dismisses
+if len(sys.argv) > 1 and sys.argv[1] == "--capture":
+    mode = sys.argv[2] if len(sys.argv) > 2 else "area"
+    delay = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
+    # Wait for the overlay bar to vanish completely from the screen
+    time.sleep(0.18)
+    if delay > 0:
+        time.sleep(delay)
+
+    # Prepare save destination
+    save_dir = os.path.expanduser("~/Resimler/Screenshots")
+    if not os.path.exists(save_dir):
+        save_dir = os.path.expanduser("~/Pictures/Screenshots")
+    os.makedirs(save_dir, exist_ok=True)
+
+    filename = time.strftime("Screenshot_%Y%m%d_%H%M%S.png")
+    filepath = os.path.join(save_dir, filename)
+
+    geom = None
+    if mode == "area":
+        # Interactive rectangular selection
+        slurp_cmd = [
+            "slurp", "-d",
+            "-b", "#1e1e2e55",
+            "-c", "#cba6f7ff",
+            "-s", "#cba6f733",
+            "-w", "2"
+        ]
+        res = subprocess.run(slurp_cmd, capture_output=True, text=True)
+        geom = res.stdout.strip()
+        if not geom:
+            sys.exit(0)
+    elif mode == "window":
+        # Interactive window picker: restrict to current workspace window boxes
+        try:
+            ws_res = subprocess.check_output(["hyprctl", "activeworkspace", "-j"]).decode()
+            active_ws_id = json.loads(ws_res).get("id")
+            clients_res = subprocess.check_output(["hyprctl", "clients", "-j"]).decode()
+            clients = json.loads(clients_res)
+            boxes = []
+            for c in clients:
+                if c.get("workspace", {}).get("id") == active_ws_id:
+                    at = c.get("at", [0, 0])
+                    size = c.get("size", [0, 0])
+                    boxes.append(f"{at[0]},{at[1]} {size[0]}x{size[1]}")
+            boxes_str = "\n".join(boxes)
+        except Exception:
+            boxes_str = ""
+
+        slurp_cmd = [
+            "slurp",
+            "-b", "#1e1e2e55",
+            "-c", "#cba6f7ff",
+            "-s", "#cba6f733",
+            "-w", "2"
+        ]
+        if boxes_str:
+            slurp_cmd.append("-r")
+            res = subprocess.run(slurp_cmd, input=boxes_str, capture_output=True, text=True)
+        else:
+            res = subprocess.run(slurp_cmd, capture_output=True, text=True)
+        geom = res.stdout.strip()
+        if not geom:
+            sys.exit(0)
+
+    # Capture image with grim
+    if geom:
+        capture_cmd = ["grim", "-g", geom, filepath]
+    else:
+        # Fullscreen
+        capture_cmd = ["grim", filepath]
+
+    capture_res = subprocess.run(capture_cmd)
+    if capture_res.returncode != 0 or not os.path.exists(filepath):
+        sys.exit(1)
+
+    # Copy to clipboard
+    try:
+        with open(filepath, "rb") as f:
+            subprocess.run(["wl-copy", "-t", "image/png"], stdin=f)
+    except Exception:
+        pass
+
+    # Send Dunst notification with thumbnail & action
+    try:
+        proc = subprocess.Popen(
+            [
+                "notify-send",
+                "-a", "Screenshot",
+                "-i", filepath,
+                "-A", "open=Open",
+                "Screenshot Captured",
+                f"Saved to {filename}\nCopied to clipboard."
+            ],
+            stdout=subprocess.PIPE, text=True
+        )
+        try:
+            out, _ = proc.communicate(timeout=8)
+            if "open" in (out or ""):
+                subprocess.Popen(["xdg-open", filepath])
+        except Exception:
+            pass
+    except Exception:
+        subprocess.Popen(["notify-send", "-a", "Screenshot", "-i", filepath, "Screenshot Captured", f"Saved to {filename}"])
+
+    sys.exit(0)
+
+
+# ==============================================================================
+# GUI: Top Floating Pill Toolbar
+# ==============================================================================
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('GtkLayerShell', '0.1')
+from gi.repository import Gtk, Gdk, GLib, GtkLayerShell
+
+LOCK_FILE = "/tmp/screenshot_menu.pid"
+
+def toggle_or_lock():
+    my_pid = os.getpid()
+    if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, "r") as f:
+                old_pid = int(f.read().strip())
+            if old_pid != my_pid:
+                os.kill(old_pid, signal.SIGTERM)
+                os.remove(LOCK_FILE)
+                sys.exit(0)
+        except Exception:
+            pass
+    try:
+        with open(LOCK_FILE, "w") as f:
+            f.write(str(my_pid))
+    except Exception:
+        pass
+
+    def _cleanup_lock():
+        try:
+            if os.path.exists(LOCK_FILE):
+                os.remove(LOCK_FILE)
+        except Exception:
+            pass
+    import atexit
+    atexit.register(_cleanup_lock)
+
+toggle_or_lock()
+
+CSS_STYLE = b"""
+* {
+    font-family: 'JetBrainsMono Nerd Font', monospace;
+    font-size: 14px;
+}
+
+window {
+    background-color: transparent;
+}
+
+.snipping-pill {
+    background-color: rgba(24, 24, 37, 0.94);
+    border: 1.5px solid rgba(203, 166, 247, 0.45);
+    border-radius: 24px;
+    padding: 4px 6px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+.snip-btn {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    padding: 6px 12px;
+    margin: 0 2px;
+    color: #cdd6f4;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 120ms ease;
+}
+
+.snip-btn:hover {
+    background-color: #313244;
+    color: #cba6f7;
+    border-color: rgba(203, 166, 247, 0.3);
+}
+
+.snip-btn:active, .snip-btn.active {
+    background-color: rgba(203, 166, 247, 0.25);
+    border-color: #cba6f7;
+    color: #cba6f7;
+}
+
+.snip-btn.close-btn:hover {
+    background-color: rgba(243, 139, 168, 0.22);
+    border-color: rgba(243, 139, 168, 0.4);
+    color: #f38ba8;
+}
+
+.snip-sep {
+    background-color: #313244;
+    min-width: 1px;
+    margin: 6px 4px;
+}
+
+.snip-label {
+    font-size: 12px;
+    margin-left: 4px;
+}
+"""
+
+class SnippingBar(Gtk.Window):
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("Snipping Tool")
+        self.set_resizable(False)
+
+        # Initialize GtkLayerShell
+        GtkLayerShell.init_for_window(self)
+        GtkLayerShell.set_layer(self, GtkLayerShell.Layer.OVERLAY)
+        GtkLayerShell.set_anchor(self, GtkLayerShell.Edge.TOP, True)
+        GtkLayerShell.set_margin(self, GtkLayerShell.Edge.TOP, 14)
+        GtkLayerShell.set_keyboard_mode(self, GtkLayerShell.KeyboardMode.ON_DEMAND)
+
+        # Apply CSS
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS_STYLE)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self.delay = 0
+
+        # Main horizontal pill container
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self.main_box.get_style_context().add_class("snipping-pill")
+        self.add(self.main_box)
+
+        # 1. Rectangle (Area) Button
+        self.btn_area = Gtk.Button()
+        self.btn_area.get_style_context().add_class("snip-btn")
+        box_area = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_icon_area = Gtk.Label()
+        lbl_icon_area.set_markup("<span font='16px'>󰒅</span>")
+        lbl_text_area = Gtk.Label(label="Area")
+        lbl_text_area.get_style_context().add_class("snip-label")
+        box_area.pack_start(lbl_icon_area, False, False, 0)
+        box_area.pack_start(lbl_text_area, False, False, 0)
+        self.btn_area.add(box_area)
+        self.btn_area.set_tooltip_text("Rectangular Selection [1 / R / A]")
+        self.btn_area.connect("clicked", lambda b: self.trigger_capture("area"))
+        self.main_box.pack_start(self.btn_area, False, False, 0)
+
+        # 2. Window Button
+        self.btn_window = Gtk.Button()
+        self.btn_window.get_style_context().add_class("snip-btn")
+        box_win = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_icon_win = Gtk.Label()
+        lbl_icon_win.set_markup("<span font='16px'>󰖲</span>")
+        lbl_text_win = Gtk.Label(label="Window")
+        lbl_text_win.get_style_context().add_class("snip-label")
+        box_win.pack_start(lbl_icon_win, False, False, 0)
+        box_win.pack_start(lbl_text_win, False, False, 0)
+        self.btn_window.add(box_win)
+        self.btn_window.set_tooltip_text("Window Snip [2 / W]")
+        self.btn_window.connect("clicked", lambda b: self.trigger_capture("window"))
+        self.main_box.pack_start(self.btn_window, False, False, 0)
+
+        # 3. Fullscreen Button
+        self.btn_screen = Gtk.Button()
+        self.btn_screen.get_style_context().add_class("snip-btn")
+        box_screen = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_icon_screen = Gtk.Label()
+        lbl_icon_screen.set_markup("<span font='16px'>󰹑</span>")
+        lbl_text_screen = Gtk.Label(label="Screen")
+        lbl_text_screen.get_style_context().add_class("snip-label")
+        box_screen.pack_start(lbl_icon_screen, False, False, 0)
+        box_screen.pack_start(lbl_text_screen, False, False, 0)
+        self.btn_screen.add(box_screen)
+        self.btn_screen.set_tooltip_text("Full Screen Snip [3 / F / S]")
+        self.btn_screen.connect("clicked", lambda b: self.trigger_capture("screen"))
+        self.main_box.pack_start(self.btn_screen, False, False, 0)
+
+        # Separator 1
+        sep1 = Gtk.Box()
+        sep1.get_style_context().add_class("snip-sep")
+        self.main_box.pack_start(sep1, False, False, 2)
+
+        # 4. Timer Delay Button
+        self.btn_delay = Gtk.Button()
+        self.btn_delay.get_style_context().add_class("snip-btn")
+        self.box_delay = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        lbl_icon_delay = Gtk.Label()
+        lbl_icon_delay.set_markup("<span font='16px'>󰔟</span>")
+        self.lbl_text_delay = Gtk.Label(label="0s")
+        self.lbl_text_delay.get_style_context().add_class("snip-label")
+        self.box_delay.pack_start(lbl_icon_delay, False, False, 0)
+        self.box_delay.pack_start(self.lbl_text_delay, False, False, 0)
+        self.btn_delay.add(self.box_delay)
+        self.btn_delay.set_tooltip_text("Timer Delay (Toggle 0s / 3s) [D]")
+        self.btn_delay.connect("clicked", lambda b: self.toggle_delay())
+        self.main_box.pack_start(self.btn_delay, False, False, 0)
+
+        # Separator 2
+        sep2 = Gtk.Box()
+        sep2.get_style_context().add_class("snip-sep")
+        self.main_box.pack_start(sep2, False, False, 2)
+
+        # 5. Close / Cancel Button
+        self.btn_close = Gtk.Button()
+        self.btn_close.get_style_context().add_class("snip-btn")
+        self.btn_close.get_style_context().add_class("close-btn")
+        lbl_icon_close = Gtk.Label()
+        lbl_icon_close.set_markup("<span font='16px'>󰅖</span>")
+        self.btn_close.add(lbl_icon_close)
+        self.btn_close.set_tooltip_text("Cancel [Esc]")
+        self.btn_close.connect("clicked", lambda b: self.close())
+        self.main_box.pack_start(self.btn_close, False, False, 0)
+
+        # Keyboard & Focus events
+        self.connect("key-press-event", self.on_key_press)
+        self.ready_to_dismiss = False
+        GLib.timeout_add(250, lambda: setattr(self, "ready_to_dismiss", True) or False)
+        self.connect("focus-out-event", self.on_focus_out)
+
+    def toggle_delay(self):
+        if self.delay == 0:
+            self.delay = 3
+            self.lbl_text_delay.set_text("3s")
+            self.btn_delay.get_style_context().add_class("active")
+        else:
+            self.delay = 0
+            self.lbl_text_delay.set_text("0s")
+            self.btn_delay.get_style_context().remove_class("active")
+
+    def on_key_press(self, widget, event):
+        kv = event.keyval
+        if kv in (Gdk.KEY_Escape, Gdk.KEY_q, Gdk.KEY_Q):
+            self.close()
+            return True
+        elif kv in (Gdk.KEY_1, Gdk.KEY_r, Gdk.KEY_R, Gdk.KEY_a, Gdk.KEY_A):
+            self.trigger_capture("area")
+            return True
+        elif kv in (Gdk.KEY_2, Gdk.KEY_w, Gdk.KEY_W):
+            self.trigger_capture("window")
+            return True
+        elif kv in (Gdk.KEY_3, Gdk.KEY_f, Gdk.KEY_F, Gdk.KEY_s, Gdk.KEY_S):
+            self.trigger_capture("screen")
+            return True
+        elif kv in (Gdk.KEY_d, Gdk.KEY_D):
+            self.toggle_delay()
+            return True
+        return False
+
+    def on_focus_out(self, widget, event):
+        if getattr(self, "ready_to_dismiss", False):
+            self.close()
+            return True
+        return False
+
+    def trigger_capture(self, mode):
+        delay = self.delay
+        # Immediately destroy window so it does not appear in the screenshot
+        self.hide()
+        self.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        # Detached worker process handles sleep, slurp, grim & notification
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "--capture", mode, str(delay)])
+        sys.exit(0)
+
+
+def main():
+    app = SnippingBar()
+    app.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

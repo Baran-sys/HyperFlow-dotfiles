@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Snipping Tool
+Comment=Windows-Style Screen Capture Tool
+Exec=screenshot-menu
+Icon=org.gnome.Snapshot
+Terminal=false
+Type=Application
+Categories=Utility;Graphics;
+Keywords=screenshot;snip;capture;print;
