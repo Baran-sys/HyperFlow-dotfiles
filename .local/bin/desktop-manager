@@ -971,9 +971,11 @@ class DesktopManager(Gtk.Window):
             -1,
             -1,
         )
-        if ctx and self.primary_drag_item and self.primary_drag_item.pixbuf:
-            Gtk.drag_set_icon_pixbuf(ctx, self.primary_drag_item.pixbuf, ICON_SIZE // 2, ICON_SIZE // 2)
-        elif not ctx:
+        if ctx:
+            empty = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, 1, 1)
+            empty.fill(0)
+            Gtk.drag_set_icon_pixbuf(ctx, empty, 0, 0)
+        else:
             self.external_dnd_active = False
 
     def on_leave_notify(self, widget, event):
