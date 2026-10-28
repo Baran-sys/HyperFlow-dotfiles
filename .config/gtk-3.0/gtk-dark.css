@@ -36,8 +36,8 @@ switch {
 }
 
 switch:checked {
-    background-color: #89b4fa;
-    border-color: #89b4fa;
+    background-color: #cba6f7;
+    border-color: #cba6f7;
 }
 
 switch slider {
@@ -59,7 +59,7 @@ scale trough {
 }
 
 scale highlight {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     border-radius: 4px;
     min-height: 6px;
 }

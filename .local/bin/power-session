@@ -41,25 +41,25 @@ window {
 
 .session-btn:hover {
     background-color: #313244;
-    border-color: #89b4fa;
-    color: #89b4fa;
+    border-color: #cba6f7;
+    color: #cba6f7;
 }
 
 .session-btn:focus {
-    border-color: #89b4fa;
+    border-color: #cba6f7;
     box-shadow: none;
 }
 
 .session-btn-active {
-    background-color: rgba(137, 180, 250, 0.18);
-    border-color: #89b4fa;
-    color: #89b4fa;
+    background-color: rgba(203, 166, 247, 0.18);
+    border-color: #cba6f7;
+    color: #cba6f7;
 }
 
 .session-btn-active:hover {
-    background-color: rgba(137, 180, 250, 0.28);
-    border-color: #89b4fa;
-    color: #89b4fa;
+    background-color: rgba(203, 166, 247, 0.28);
+    border-color: #cba6f7;
+    color: #cba6f7;
 }
 
 .btn-icon {
@@ -94,7 +94,7 @@ def get_uptime_str():
 class PowerSessionWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Power Session", application=app)
-        self.set_default_size(346, 102)
+        self.set_default_size(290, 102)
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
         self.ready_to_close = False
@@ -146,16 +146,7 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
         )
         btn_box.pack_start(btn_lock, False, False, 0)
 
-        # 5. Caffeine (Inhibit Screen Sleep)
-        self.btn_caffeine = self.create_icon_button(
-            icon="",
-            tooltip="Caffeine Mode (C)",
-            action=self.action_toggle_caffeine
-        )
-        self.update_caffeine_ui()
-        btn_box.pack_start(self.btn_caffeine, False, False, 0)
-
-        # 6. Log Out
+        # 5. Log Out
         btn_logout = self.create_icon_button(
             icon="",
             tooltip="Log Out (O/E)",
@@ -173,26 +164,6 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
 
         self.show_all()
         self.set_focus(None)
-
-    def is_caffeine_active(self):
-        res = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True)
-        return res.returncode != 0
-
-    def update_caffeine_ui(self):
-        active = self.is_caffeine_active()
-        ctx = self.btn_caffeine.get_style_context()
-        if active:
-            if not ctx.has_class("session-btn-active"):
-                ctx.add_class("session-btn-active")
-            self.btn_caffeine.set_tooltip_text("Caffeine Active (Screen sleep inhibited) - [C]")
-        else:
-            if ctx.has_class("session-btn-active"):
-                ctx.remove_class("session-btn-active")
-            self.btn_caffeine.set_tooltip_text("Caffeine Off (Click: Inhibit screen sleep) - [C]")
-
-    def action_toggle_caffeine(self):
-        subprocess.run([os.path.expanduser("~/.local/bin/toggle-caffeine")])
-        self.update_caffeine_ui()
 
     def create_icon_button(self, icon, tooltip, action):
         btn = Gtk.Button()
@@ -227,9 +198,6 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
             return True
         elif val in (Gdk.KEY_l, Gdk.KEY_L):
             self.action_lock()
-            return True
-        elif val in (Gdk.KEY_c, Gdk.KEY_C):
-            self.action_toggle_caffeine()
             return True
         elif val in (Gdk.KEY_o, Gdk.KEY_O, Gdk.KEY_e, Gdk.KEY_E):
             self.action_logout()

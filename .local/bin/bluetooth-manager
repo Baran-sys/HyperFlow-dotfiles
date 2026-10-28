@@ -71,7 +71,7 @@ headerbar button:hover {
 }
 
 .search-box:focus {
-    border-color: #89b4fa;
+    border-color: #cba6f7;
     box-shadow: none;
     outline: none;
 }
@@ -99,7 +99,7 @@ row:selected {
 }
 
 .btn-connect {
-    background: #89b4fa;
+    background: #cba6f7;
     color: #11111b;
     font-weight: bold;
     border-radius: 6px;
@@ -134,7 +134,7 @@ row:selected {
 }
 
 .btn-disconnect:hover {
-    background: #eba0ac;
+    background: #e78284;
 }
 
 .badge-connected {
@@ -147,12 +147,12 @@ row:selected {
 }
 
 .badge-paired {
-    background: rgba(137, 180, 250, 0.12);
-    color: #89b4fa;
+    background: rgba(203, 166, 247, 0.12);
+    color: #cba6f7;
     font-size: 11px;
     border-radius: 4px;
     padding: 2px 6px;
-    border: 1px solid rgba(137, 180, 250, 0.25);
+    border: 1px solid rgba(203, 166, 247, 0.25);
 }
 
 .status-bar {

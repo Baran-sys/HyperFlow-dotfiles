@@ -70,14 +70,14 @@
     background = "#1e1e2ee6"
     foreground = "#cdd6f4"
     frame_color = "#313244"
-    highlight = "#89b4fa"
+    highlight = "#cba6f7"
     timeout = 4
 
 [urgency_normal]
     background = "#1e1e2ee6"
     foreground = "#cdd6f4"
     frame_color = "#45475a"
-    highlight = "#89b4fa"
+    highlight = "#cba6f7"
     timeout = 5
 
 [urgency_critical]

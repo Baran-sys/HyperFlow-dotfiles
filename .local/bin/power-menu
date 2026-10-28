@@ -72,7 +72,7 @@ headerbar button:hover {
 .battery-pct {
     font-size: 20px;
     font-weight: 700;
-    color: #89b4fa;
+    color: #cba6f7;
 }
 
 .battery-state {
@@ -83,7 +83,7 @@ headerbar button:hover {
 
 .battery-health {
     font-size: 11px;
-    color: #89dceb;
+    color: #a6adc8;
     margin-top: 1px;
 }
 
@@ -105,22 +105,57 @@ row:hover {
     border: 1px solid #45475a;
 }
 
+.caffeine-card {
+    background: #252538;
+    border: 1px solid #313244;
+    border-radius: 12px;
+    margin: 2px 10px 4px 10px;
+    padding: 8px 12px;
+}
+
+.btn-caffeine {
+    background: #313244;
+    color: #cdd6f4;
+    border-radius: 6px;
+    border: 1px solid #45475a;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.btn-caffeine:hover {
+    background: #45475a;
+    color: #ffffff;
+}
+
+.btn-caffeine-active {
+    background: rgba(203, 166, 247, 0.20);
+    color: #cba6f7;
+    border: 1px solid #cba6f7;
+}
+
+.btn-caffeine-active:hover {
+    background: rgba(203, 166, 247, 0.30);
+    color: #cba6f7;
+    border-color: #cba6f7;
+}
+
 .profile-active {
-    background: rgba(137, 180, 250, 0.15);
-    border: 1px solid rgba(137, 180, 250, 0.4);
+    background: rgba(203, 166, 247, 0.15);
+    border: 1px solid rgba(203, 166, 247, 0.4);
 }
 
 .profile-active:hover {
-    background: rgba(137, 180, 250, 0.22);
+    background: rgba(203, 166, 247, 0.22);
 }
 
 .hz-active {
-    background: rgba(137, 180, 250, 0.15);
-    border: 1px solid rgba(137, 180, 250, 0.4);
+    background: rgba(203, 166, 247, 0.15);
+    border: 1px solid rgba(203, 166, 247, 0.4);
 }
 
 .hz-active:hover {
-    background: rgba(137, 180, 250, 0.22);
+    background: rgba(203, 166, 247, 0.22);
 }
 
 .badge-active {
@@ -132,21 +167,21 @@ row:hover {
 }
 
 .badge-hz-active {
-    background: rgba(137, 180, 250, 0.2);
-    color: #89b4fa;
+    background: rgba(203, 166, 247, 0.2);
+    color: #cba6f7;
     font-weight: bold;
     border-radius: 6px;
     padding: 2px 6px; font-size: 10px;
 }
 
 .badge-time {
-    background: rgba(137, 180, 250, 0.15);
-    color: #89b4fa;
+    background: rgba(203, 166, 247, 0.15);
+    color: #cba6f7;
     font-size: 11px;
     font-weight: bold;
     border-radius: 6px;
     padding: 2px 6px; font-size: 10px;
-    border: 1px solid rgba(137, 180, 250, 0.3);
+    border: 1px solid rgba(203, 166, 247, 0.3);
 }
 
 .badge-discharging {
@@ -188,18 +223,6 @@ row:hover {
 .btn-select:hover {
     background: #45475a;
     color: #ffffff;
-}
-
-.btn-caffeine-active {
-    background: rgba(137, 180, 250, 0.20);
-    color: #89b4fa;
-    border-color: #89b4fa;
-}
-
-.btn-caffeine-active:hover {
-    background: rgba(137, 180, 250, 0.30);
-    color: #89b4fa;
-    border-color: #89b4fa;
 }
 
 .status-bar {
@@ -304,6 +327,34 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         card.pack_start(self.lbl_health, False, False, 0)
 
         content_box.pack_start(card, False, False, 0)
+
+        # Caffeine Card / Row
+        caff_card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        caff_card.get_style_context().add_class("caffeine-card")
+
+        lbl_caff_icon = Gtk.Label()
+        lbl_caff_icon.set_markup("<span font_family='JetBrainsMono Nerd Font' font='16'></span>")
+        lbl_caff_icon.set_valign(Gtk.Align.CENTER)
+        caff_card.pack_start(lbl_caff_icon, False, False, 0)
+
+        vbox_caff = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        lbl_caff_title = Gtk.Label()
+        lbl_caff_title.set_markup("<b>Caffeine Mode</b>")
+        lbl_caff_title.set_halign(Gtk.Align.START)
+        vbox_caff.pack_start(lbl_caff_title, False, False, 0)
+
+        self.lbl_caff_desc = Gtk.Label()
+        self.lbl_caff_desc.set_halign(Gtk.Align.START)
+        vbox_caff.pack_start(self.lbl_caff_desc, False, False, 0)
+        caff_card.pack_start(vbox_caff, True, True, 0)
+
+        self.btn_caff_toggle = Gtk.Button(label="Off")
+        self.btn_caff_toggle.get_style_context().add_class("btn-caffeine")
+        self.btn_caff_toggle.set_valign(Gtk.Align.CENTER)
+        self.btn_caff_toggle.connect("clicked", lambda b: self.toggle_caffeine())
+        caff_card.pack_end(self.btn_caff_toggle, False, False, 0)
+
+        content_box.pack_start(caff_card, False, False, 0)
 
         # 1. Section: Display Refresh Rate
         lbl_hz_title = Gtk.Label(label="DISPLAY REFRESH RATE (HZ)")
@@ -684,6 +735,29 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
 
         self.listbox_hz.show_all()
         self.listbox_prof.show_all()
+        self.refresh_caffeine_ui()
+
+    def is_caffeine_active(self):
+        res = subprocess.run(["pgrep", "-x", "hypridle"], capture_output=True)
+        return res.returncode != 0
+
+    def toggle_caffeine(self):
+        subprocess.run([os.path.expanduser("~/.local/bin/toggle-caffeine")])
+        self.refresh_caffeine_ui()
+
+    def refresh_caffeine_ui(self):
+        active = self.is_caffeine_active()
+        ctx = self.btn_caff_toggle.get_style_context()
+        if active:
+            self.btn_caff_toggle.set_label("Active")
+            if not ctx.has_class("btn-caffeine-active"):
+                ctx.add_class("btn-caffeine-active")
+            self.lbl_caff_desc.set_markup("<small><span alpha='65%'>Screen sleep & lock are suspended</span></small>")
+        else:
+            self.btn_caff_toggle.set_label("Off")
+            if ctx.has_class("btn-caffeine-active"):
+                ctx.remove_class("btn-caffeine-active")
+            self.lbl_caff_desc.set_markup("<small><span alpha='65%'>Automatic screen sleep & power saving</span></small>")
 
     def set_profile(self, profile_id):
         def _apply_prof():

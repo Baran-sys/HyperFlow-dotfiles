@@ -71,7 +71,7 @@ stackswitcher button {
 }
 
 stackswitcher button:checked {
-    background: #89b4fa;
+    background: #cba6f7;
     color: #11111b;
 }
 
@@ -86,7 +86,7 @@ stackswitcher button:checked {
 .card-title {
     font-size: 12px;
     font-weight: bold;
-    color: #89b4fa;
+    color: #cba6f7;
     margin-bottom: 6px;
 }
 
@@ -97,7 +97,7 @@ scale trough {
 }
 
 scale highlight {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     border-radius: 6px;
 }
 

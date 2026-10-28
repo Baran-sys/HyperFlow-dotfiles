@@ -17,12 +17,12 @@ configuration {
     bg-col:  #1e1e2ee6;
     bg-col-light: #252538;
     border-col: #45475a;
-    selected-col: #89b4fa;
-    blue: #89b4fa;
+    selected-col: #cba6f7;
+    blue: #cba6f7;
     fg-col: #cdd6f4;
     fg-col2: #11111b;
     grey: #6c7086;
-    accent: #89b4fa;
+    accent: #cba6f7;
 
     width: 620;
     font: "JetBrainsMono Nerd Font 13";

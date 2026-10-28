@@ -274,6 +274,8 @@ class DesktopManager(Gtk.Window):
         self.darea.drag_dest_set(Gtk.DestDefaults.ALL, self.dnd_targets, Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
         self.darea.connect("drag-data-received", self.on_drag_data_received)
         self.darea.connect("drag-data-get", self.on_drag_data_get)
+        self.darea.connect("drag-motion", self.on_drag_motion)
+        self.darea.connect("drag-failed", self.on_drag_failed)
         self.darea.connect("drag-end", self.on_drag_end)
         self.darea.connect("leave-notify-event", self.on_leave_notify)
 
@@ -980,6 +982,27 @@ class DesktopManager(Gtk.Window):
                 self.start_external_drag(event)
         return False
 
+    def on_drag_motion(self, widget, drag_context, x, y, time):
+        self.drag_curr_x = x
+        self.drag_curr_y = y
+        for it in self.dragging_items:
+            ox, oy = self.drag_offsets.get(it, (CELL_W / 2, CELL_H / 2))
+            it.x = x - ox
+            it.y = y - oy
+            it.target_x = it.x
+            it.target_y = it.y
+        over = self.item_at(x, y, exclude_set=set(self.dragging_items))
+        self.drop_target_folder = over if (over and over.path.is_dir()) else None
+        self.darea.queue_draw()
+        Gdk.drag_status(drag_context, Gdk.DragAction.MOVE, time)
+        return True
+
+    def on_drag_failed(self, widget, drag_context, result):
+        if self.dragging_items:
+            self.apply_drop_internal(self.drag_curr_x, self.drag_curr_y)
+            return True
+        return False
+
     def on_drag_data_get(self, widget, drag_context, data, info, time):
         uris = [it.path.resolve().as_uri() for it in self.dragging_items if it.path.exists()]
         if info == 0:
@@ -989,14 +1012,15 @@ class DesktopManager(Gtk.Window):
 
     def on_drag_end(self, widget, drag_context):
         self.external_dnd_active = False
-        for it in self.dragging_items:
-            it.target_scale = 1.0
-            it.update_target_pos(snap_immediately=False)
-        self.drop_target_folder = None
-        self.dragging_items.clear()
-        self.primary_drag_item = None
-        self.is_dragging_icon = False
-        self.ensure_animation_loop()
+        if self.dragging_items:
+            for it in self.dragging_items:
+                it.target_scale = 1.0
+                it.update_target_pos(snap_immediately=False)
+            self.drop_target_folder = None
+            self.dragging_items.clear()
+            self.primary_drag_item = None
+            self.is_dragging_icon = False
+            self.ensure_animation_loop()
 
     def close_modal(self, confirm=False):
         if not self.modal_active or self.modal_closing:
@@ -1219,63 +1243,82 @@ class DesktopManager(Gtk.Window):
             self.darea.queue_draw()
         return False
 
+    def apply_drop_internal(self, x, y):
+        if not self.dragging_items:
+            return False
+
+        for it in self.dragging_items:
+            it.target_scale = 1.0
+
+        if self.drop_target_folder and self.drop_target_folder not in self.dragging_items:
+            target_dir = self.drop_target_folder.path
+            for it in self.dragging_items:
+                try:
+                    shutil.move(str(it.path), str(target_dir / it.name))
+                    self.positions.pop(it.name, None)
+                except Exception as e:
+                    self.notify("Taşıma Hatası", str(e))
+            self.drop_target_folder = None
+            self.dragging_items.clear()
+            self.primary_drag_item = None
+            self.is_dragging_icon = False
+            self.external_dnd_active = False
+            self.save_positions()
+            self.reload_items()
+            return True
+
+        max_cols = self.get_max_cols()
+        max_rows = self.get_max_rows()
+        occupied = {(it.col, it.row): it for it in self.items if it not in self.dragging_items}
+
+        for it in self.dragging_items:
+            cx = it.x + CELL_W / 2.0
+            cy = it.y + CELL_H / 2.0
+            new_col = max(0, min(max_cols - 1, int((cx - MARGIN_LEFT) // CELL_W)))
+            new_row = max(0, min(max_rows - 1, int((cy - MARGIN_TOP) // CELL_H)))
+
+            if (new_col, new_row) in occupied:
+                occupant = occupied.pop((new_col, new_row))
+                if (it.col, it.row) not in occupied:
+                    occupant.col, occupant.row = it.col, it.row
+                else:
+                    fc, fr = 0, 0
+                    while (fc, fr) in occupied or (fc, fr) == (new_col, new_row):
+                        fr += 1
+                        if fr >= max_rows:
+                            fr = 0
+                            fc += 1
+                    occupant.col, occupant.row = fc, fr
+                occupant.update_target_pos(snap_immediately=False)
+                occupied[(occupant.col, occupant.row)] = occupant
+                self.positions[occupant.name] = [occupant.col, occupant.row]
+
+            it.col = new_col
+            it.row = new_row
+            it.update_target_pos(snap_immediately=False)
+            occupied[(new_col, new_row)] = it
+            self.positions[it.name] = [new_col, new_row]
+
+        self.save_positions()
+        self.drop_target_folder = None
+        self.dragging_items.clear()
+        self.primary_drag_item = None
+        self.is_dragging_icon = False
+        self.external_dnd_active = False
+        self.ensure_animation_loop()
+        self.darea.queue_draw()
+        return True
+
     def on_button_release(self, widget, event):
         if self.modal_active:
             return True
 
         if event.button == 1:
             if self.is_dragging_icon and self.primary_drag_item:
-                for it in self.dragging_items:
-                    it.target_scale = 1.0
-
-                if self.drop_target_folder and self.drop_target_folder not in self.dragging_items:
-                    target_dir = self.drop_target_folder.path
-                    for it in self.dragging_items:
-                        try:
-                            shutil.move(str(it.path), str(target_dir / it.name))
-                            self.positions.pop(it.name, None)
-                        except Exception as e:
-                            self.notify("Taşıma Hatası", str(e))
-                    self.drop_target_folder = None
-                    self.dragging_items.clear()
-                    self.primary_drag_item = None
-                    self.is_dragging_icon = False
-                    self.save_positions()
-                    self.reload_items()
-                    return True
-
-                max_cols = self.get_max_cols()
-                max_rows = self.get_max_rows()
-                occupied = {(it.col, it.row): it for it in self.items if it not in self.dragging_items}
-
-                for it in self.dragging_items:
-                    cx = it.x + CELL_W / 2.0
-                    cy = it.y + CELL_H / 2.0
-                    new_col = max(0, min(max_cols - 1, int((cx - MARGIN_LEFT) // CELL_W)))
-                    new_row = max(0, min(max_rows - 1, int((cy - MARGIN_TOP) // CELL_H)))
-
-                    if (new_col, new_row) in occupied:
-                        occupant = occupied.pop((new_col, new_row))
-                        if (it.col, it.row) not in occupied:
-                            occupant.col, occupant.row = it.col, it.row
-                        else:
-                            fc, fr = 0, 0
-                            while (fc, fr) in occupied or (fc, fr) == (new_col, new_row):
-                                fr += 1
-                                if fr >= max_rows:
-                                    fr = 0
-                                    fc += 1
-                            occupant.col, occupant.row = fc, fr
-                        occupant.update_target_pos(snap_immediately=False)
-                        occupied[(occupant.col, occupant.row)] = occupant
-
-                    it.col = new_col
-                    it.row = new_row
-                    it.update_target_pos(snap_immediately=False)
-                    occupied[(new_col, new_row)] = it
-
-                self.save_positions()
-                self.ensure_animation_loop()
+                self.apply_drop_internal(event.x, event.y)
+                self.rubberband_active = False
+                self.darea.queue_draw()
+                return True
 
             self.drop_target_folder = None
             self.dragging_items.clear()
@@ -1287,7 +1330,15 @@ class DesktopManager(Gtk.Window):
         return False
 
     def on_drag_data_received(self, widget, drag_context, x, y, data, info, time):
+        if self.dragging_items:
+            self.apply_drop_internal(x, y)
+            drag_context.finish(True, False, time)
+            return
+
         uris = data.get_uris()
+        if not uris:
+            drag_context.finish(False, False, time)
+            return
         col = max(0, min(self.get_max_cols() - 1, int((x - MARGIN_LEFT) // CELL_W)))
         row = max(0, min(self.get_max_rows() - 1, int((y - MARGIN_TOP) // CELL_H)))
         for uri in uris:

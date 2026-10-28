@@ -90,7 +90,7 @@ progressbar trough {
 }
 
 progressbar progress {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     border-radius: 4px;
 }
 
@@ -113,7 +113,7 @@ progressbar progress {
 }
 
 .search-box:focus {
-    border-color: #89b4fa;
+    border-color: #cba6f7;
     box-shadow: none;
     outline: none;
 }
@@ -131,7 +131,7 @@ treeview:selected {
 
 treeview header button {
     background-color: #181825;
-    color: #89b4fa;
+    color: #cba6f7;
     font-weight: bold;
     border: none;
     border-bottom: 1px solid #313244;
@@ -151,7 +151,7 @@ treeview header button {
 }
 
 .btn-kill:hover {
-    background: #eba0ac;
+    background: #e78284;
 }
 
 .btn-kill:disabled {
@@ -614,7 +614,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                         gpu_count += 1
                     elif "Intel" in dev_set:
                         dev_str = "Intel"
-                        markup = "<span foreground='#89b4fa' weight='bold'>Intel</span>"
+                        markup = "<span foreground='#cba6f7' weight='bold'>Intel</span>"
                         gpu_count += 1
                     else:
                         dev_str = "-"

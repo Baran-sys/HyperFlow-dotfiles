@@ -110,7 +110,7 @@ scale trough {
 }
 
 scale highlight {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     border-radius: 4px;
     min-height: 6px;
 }
@@ -140,7 +140,7 @@ scale slider:hover {
 
 /* Material 3 Expressive Media Buttons */
 .btn-m3-play {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     color: #11111b;
     border-radius: 26px;
     min-width: 52px;
@@ -151,12 +151,12 @@ scale slider:hover {
 
 .btn-m3-play:hover {
     background-color: #b4befe;
-    box-shadow: 0 4px 14px rgba(137, 180, 250, 0.45);
+    box-shadow: 0 4px 14px rgba(203, 166, 247, 0.45);
 }
 
 .btn-m3-play:active {
-    background-color: #74c7ec;
-    box-shadow: 0 2px 6px rgba(137, 180, 250, 0.25);
+    background-color: #f5c2e7;
+    box-shadow: 0 2px 6px rgba(203, 166, 247, 0.25);
 }
 
 .btn-m3-tonal {
@@ -197,15 +197,15 @@ scale slider:hover {
 
 .btn-m3-ghost.active {
     background-color: #313244;
-    color: #89b4fa;
-    border: 1px solid rgba(137, 180, 250, 0.4);
-    box-shadow: 0 0 10px rgba(137, 180, 250, 0.2);
+    color: #cba6f7;
+    border: 1px solid rgba(203, 166, 247, 0.4);
+    box-shadow: 0 0 10px rgba(203, 166, 247, 0.2);
     border-radius: 50%;
 }
 
 .btn-m3-ghost.active:hover {
     background-color: #45475a;
-    color: #b4befe;
+    color: #f5c2e7;
 }
 
 .btn-m3-pill {

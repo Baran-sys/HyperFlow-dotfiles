@@ -67,7 +67,7 @@ headerbar button:hover {
 .clock-time {
     font-size: 26px;
     font-weight: 800;
-    color: #89b4fa;
+    color: #cba6f7;
     font-family: 'JetBrainsMono Nerd Font', monospace;
 }
 
@@ -82,20 +82,25 @@ calendar {
     color: #cdd6f4;
     border-radius: 12px;
     border: 1px solid #313244;
-    margin: 4px 10px 6px 10px;
+    margin: 4px 10px 4px 10px;
     padding: 6px 8px;
     font-size: 11px;
 }
 
 calendar:selected {
-    background-color: #89b4fa;
+    background-color: #cba6f7;
     color: #11111b;
     font-weight: bold;
-    border-radius: 6px;
+    border-radius: 7px;
 }
 
 calendar.header {
-    color: #89b4fa;
+    color: #cba6f7;
+    font-weight: bold;
+}
+
+calendar.highlight {
+    color: #cba6f7;
     font-weight: bold;
 }
 
@@ -170,9 +175,10 @@ class CalendarWindow(Gtk.ApplicationWindow):
             Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES |
             Gtk.CalendarDisplayOptions.SHOW_WEEK_NUMBERS
         )
+        self.calendar.set_valign(Gtk.Align.CENTER)
         self.calendar.connect("day-selected", self.on_day_selected)
         self.calendar.connect("month-changed", self.on_month_changed)
-        main_box.pack_start(self.calendar, True, True, 0)
+        main_box.pack_start(self.calendar, False, False, 4)
 
         # Status Bar
         self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
