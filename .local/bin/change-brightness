@@ -1,20 +1,35 @@
 #!/usr/bin/env bash
-# Usage: change-brightness up|down|<percent>
-# Root gerektirmez: systemd-logind SetBrightness API'sini kullanır.
-# Hybrid (Intel + NVIDIA) laptoplar için tüm backlight cihazlarını senkron değiştirir.
+# Usage: change-brightness up|down|--save|--restore|<percent>
+# Root gerektirmez: systemd-logind SetBrightness API'sini veya brightnessctl kullanır.
+# Tüm backlight cihazlarını (intel_backlight, amdgpu_bl*, acpi_video* vb.) otomatik bulur.
 
 STEP=5
-REF="/sys/class/backlight/intel_backlight"
-[ -d "$REF" ] || REF=$(find /sys/class/backlight -mindepth 1 -maxdepth 1 | head -n 1)
+REF=$(find /sys/class/backlight -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)
 
-ref_max=$(cat "$REF/max_brightness")
-ref_cur=$(cat "$REF/brightness")
+if [ -z "$REF" ] || [ ! -d "$REF" ]; then
+    exit 0
+fi
+
+ref_max=$(cat "$REF/max_brightness" 2>/dev/null || echo 100)
+ref_cur=$(cat "$REF/brightness" 2>/dev/null || echo 100)
 cur_pct=$(( (ref_cur * 100 + ref_max / 2) / ref_max ))
 
 case "$1" in
+    --save)
+        echo "$cur_pct" > /tmp/.bright_save_pct
+        exit 0
+        ;;
+    --restore)
+        if [ -f /tmp/.bright_save_pct ]; then
+            new_pct=$(cat /tmp/.bright_save_pct)
+        else
+            exit 0
+        fi
+        QUIET=1
+        ;;
     up|+)   new_pct=$(( cur_pct + STEP )) ;;
     down|-) new_pct=$(( cur_pct - STEP )) ;;
-    ''|*[!0-9]*) echo "Usage: $0 up|down|<percent>"; exit 1 ;;
+    ''|*[!0-9]*) echo "Usage: $0 up|down|--save|--restore|<percent>"; exit 1 ;;
     *)      new_pct=$1 ;;
 esac
 [ "$new_pct" -gt 100 ] && new_pct=100
@@ -43,6 +58,8 @@ for dev in /sys/class/backlight/*; do
     brightnessctl -q -d "$name" set "$val" >/dev/null 2>&1
 done
 
-notify-send -a "Brightness" -t 1200 \
-    -h string:x-dunst-stack-tag:brightness -h int:value:"$new_pct" \
-    -i display-brightness-symbolic "Parlaklık" "%$new_pct"
+if [ "${QUIET:-0}" != "1" ] && [ "${2:-}" != "--quiet" ]; then
+    notify-send -a "Brightness" -t 1200 \
+        -h string:x-dunst-stack-tag:brightness -h int:value:"$new_pct" \
+        -i display-brightness-symbolic "Parlaklık" "%$new_pct"
+fi

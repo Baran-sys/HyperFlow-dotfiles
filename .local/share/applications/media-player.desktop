@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Medya Oynatıcı
 Comment=Medya Oynatıcı ve Müzik Kontrolcüsü
-Exec=/home/bren/.local/bin/media-player
+Exec=media-player
 Icon=multimedia-player
 Terminal=false
 Type=Application

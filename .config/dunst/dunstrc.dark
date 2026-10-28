@@ -53,7 +53,7 @@
     ### History & Interactions ###
     sticky_history = yes
     history_length = 20
-    dmenu = /home/bren/.local/bin/tofi --prompt-text "dunst: "
+    dmenu = tofi --prompt-text "dunst: "
     browser = /usr/bin/firefox --new-tab
     always_run_script = true
     title = Dunst

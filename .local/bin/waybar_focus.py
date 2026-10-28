@@ -142,9 +142,50 @@ def release_focus_lock(my_pid=None):
 
 class SmartFocus:
     @classmethod
-    def setup(cls, window):
+    def position_applet(cls, window, default_w, default_h, align="right", offset=12, top_margin=46):
+        """
+        Universal monitor-aware positioning:
+        Places Waybar popover applets dynamically at the top-left or top-right
+        of the currently focused monitor regardless of screen resolution or scaling.
+        """
+        try:
+            import json
+            res = subprocess.check_output(["hyprctl", "monitors", "-j"], timeout=0.3).decode()
+            monitors = json.loads(res)
+            if monitors:
+                mon = next((m for m in monitors if m.get("focused")), monitors[0])
+                scale = float(mon.get("scale", 1.0)) or 1.0
+                eff_w = int(round(float(mon.get("width", 1920)) / scale))
+                if align == "left":
+                    x = max(8, int(offset))
+                elif align == "center":
+                    x = max(8, (eff_w - default_w) // 2 + int(offset))
+                else:
+                    # offset is distance from the right edge of the screen
+                    x = max(8, eff_w - default_w - int(offset))
+                y = int(top_margin)
+                subprocess.Popen(
+                    ["hyprctl", "dispatch", "movewindowpixel", f"exact {x} {y},pid:{os.getpid()}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+        except Exception:
+            pass
+
+    @classmethod
+    def setup(cls, window, align=None, offset=12):
         my_pid = os.getpid()
         acquire_focus_lock()
+
+        if align is not None:
+            def _reposition_when_mapped(*args):
+                w, h = window.get_size()
+                cls.position_applet(window, w or 360, h or 420, align=align, offset=offset)
+                return False
+            try:
+                from gi.repository import GLib
+                GLib.timeout_add(30, _reposition_when_mapped)
+            except Exception:
+                pass
 
         cleaned_up = [False]
 

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Ses Karıştırıcı
 Comment=Ses Seviyesi ve Çıkış Aygıtı Denetimi
-Exec=/home/bren/.local/bin/audio-mixer
+Exec=audio-mixer
 Icon=multimedia-volume-control
 Terminal=false
 Type=Application

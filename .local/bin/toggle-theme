@@ -18,37 +18,43 @@ apply_wallpaper() {
     local wp_blurred="$2"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Applying wallpaper: $wp" >> "$LOGFILE"
 
-    # 1. Update hyprpaper configuration
-    cat << HP_EOF > "$HOME/.config/hypr/hyprpaper.conf"
-wallpaper {
-    monitor = eDP-1
-    path = $wp
-    fit_mode = cover
-}
+    # 1. Update hyprpaper configuration universally for all monitors
+    local MONITORS
+    MONITORS=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
 
-wallpaper {
-    monitor = 
-    path = $wp
-    fit_mode = cover
-}
-splash = false
-HP_EOF
+    {
+        for mon in $MONITORS; do
+            echo "wallpaper {"
+            echo "    monitor = $mon"
+            echo "    path = $wp"
+            echo "    fit_mode = cover"
+            echo "}"
+            echo ""
+        done
+        echo "wallpaper {"
+        echo "    monitor = "
+        echo "    path = $wp"
+        echo "    fit_mode = cover"
+        echo "}"
+        echo "splash = false"
+    } > "$HOME/.config/hypr/hyprpaper.conf"
 
     # 2. Update hyprlock lockscreen wallpaper
     sed -i "s|cat_leaves_blurred.*\.png|$wp_blurred|" "$HOME/.config/hypr/hyprlock.conf" 2>/dev/null || true
 
-    # 3. Dynamically set wallpaper with hyprctl hyprpaper
+    # 3. Dynamically set wallpaper with hyprctl hyprpaper on all connected monitors
     local success=false
     if pgrep -x hyprpaper >/dev/null 2>&1; then
-        if hyprctl hyprpaper wallpaper "eDP-1,${wp},cover" >>"$LOGFILE" 2>&1; then
-            success=true
-            local MONITORS
-            MONITORS=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name' 2>/dev/null || echo "eDP-1")
+        if [ -n "$MONITORS" ]; then
             for mon in $MONITORS; do
-                if [ "$mon" != "eDP-1" ]; then
-                    hyprctl hyprpaper wallpaper "${mon},${wp},cover" >/dev/null 2>&1 || true
+                if hyprctl hyprpaper wallpaper "${mon},${wp},cover" >>"$LOGFILE" 2>&1; then
+                    success=true
                 fi
             done
+        else
+            if hyprctl hyprpaper wallpaper ",${wp},cover" >>"$LOGFILE" 2>&1; then
+                success=true
+            fi
         fi
     fi
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || whoami)}"
+if [ "$TARGET_USER" = "root" ] && [ -n "$USER" ] && [ "$USER" != "root" ]; then
+    TARGET_USER="$USER"
+fi
+
 echo "================================================================="
 echo "  SDDM Otomatik Giriş (Autologin) Yapılandırması"
 echo "================================================================="
@@ -15,32 +20,35 @@ fi
 echo "[1/3] /etc/sddm.conf.d/ dizini kontrol ediliyor..."
 mkdir -p /etc/sddm.conf.d
 
-echo "[2/3] the_hyde_project.conf içindeki çakışan ayarlar temizleniyor..."
+echo "[2/3] Mevcut SDDM yapılandırmasındaki çakışan ayarlar temizleniyor..."
 if [ -f /etc/sddm.conf.d/the_hyde_project.conf ]; then
     cp -a /etc/sddm.conf.d/the_hyde_project.conf /etc/sddm.conf.d/the_hyde_project.conf.bak
-    # the_hyde_project.conf içindeki boş Autologin kısmını User=bren yap
-    python3 -c "
+    python3 - "$TARGET_USER" << 'PYEOF' 2>/dev/null || true
+import re, sys
+user = sys.argv[1]
 with open('/etc/sddm.conf.d/the_hyde_project.conf', 'r') as f:
     text = f.read()
-
-import re
-text = re.sub(r'\[Autologin\]\s*Relogin=[^\n]*\s*Session=[^\n]*\s*User=[^\n]*', '[Autologin]\nRelogin=false\nSession=hyprland.desktop\nUser=bren', text)
+text = re.sub(
+    r'\[Autologin\]\s*Relogin=[^\n]*\s*Session=[^\n]*\s*User=[^\n]*',
+    f'[Autologin]\nRelogin=false\nSession=hyprland.desktop\nUser={user}',
+    text
+)
 with open('/etc/sddm.conf.d/the_hyde_project.conf', 'w') as f:
     f.write(text)
-" 2>/dev/null || true
+PYEOF
 fi
 
 echo "[3/3] autologin.conf ve zz-autologin.conf ayarlanıyor..."
-cat << 'AUTOCONF' > /etc/sddm.conf.d/autologin.conf
+cat << AUTOCONF > /etc/sddm.conf.d/autologin.conf
 [Autologin]
-User=bren
+User=${TARGET_USER}
 Session=hyprland.desktop
 Relogin=false
 AUTOCONF
 
-cat << 'AUTOCONF' > /etc/sddm.conf.d/zz-autologin.conf
+cat << AUTOCONF > /etc/sddm.conf.d/zz-autologin.conf
 [Autologin]
-User=bren
+User=${TARGET_USER}
 Session=hyprland.desktop
 Relogin=false
 AUTOCONF
@@ -48,7 +56,7 @@ AUTOCONF
 echo ""
 echo "================================================================="
 echo "  [OK] SDDM Otomatik Giriş Başarıyla Ayarlandı!"
-echo "  Kullanıcı : bren"
+echo "  Kullanıcı : ${TARGET_USER}"
 echo "  Oturum    : hyprland.desktop"
 echo "================================================================="
 echo ""

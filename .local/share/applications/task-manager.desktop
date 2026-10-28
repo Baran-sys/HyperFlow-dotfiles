@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Görev Yöneticisi
 Comment=Sistem Süreçleri ve Kaynak Kullanımı
-Exec=/home/bren/.local/bin/task-manager
+Exec=task-manager
 Icon=utilities-system-monitor
 Terminal=false
 Type=Application

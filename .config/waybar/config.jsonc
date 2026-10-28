@@ -27,9 +27,9 @@
     "custom/media": {
         "format": "{}",
         "return-type": "json",
-        "exec": "/home/bren/.local/bin/waybar-media",
+        "exec": "$HOME/.local/bin/waybar-media",
         "interval": 2,
-        "on-click": "/home/bren/.local/bin/media-player",
+        "on-click": "$HOME/.local/bin/media-player",
         "on-click-right": "playerctl play-pause",
         "on-scroll-up": "playerctl next",
         "on-scroll-down": "playerctl previous"
@@ -48,7 +48,7 @@
     },
     "clock": {
         "format": "  {:%d-%m-%Y    %H:%M}",
-        "on-click": "/home/bren/.local/bin/calendar-app",
+        "on-click": "$HOME/.local/bin/calendar-app",
         "interval": 1,
         "rotate": 0,
         "tooltip-format": "<tt><small>{calendar}</small></tt>",
@@ -70,9 +70,9 @@
         "tooltip-format-disabled": "Wi-Fi kapalı",
         "tooltip-format": "{essid} (%{signalStrength})\nIP: {ipaddr}",
         "tooltip-format-disconnected": "Bağlantı yok",
-        "on-click": "/home/bren/.local/bin/wifi-manager",
+        "on-click": "$HOME/.local/bin/wifi-manager",
         "interval": 2,
-        "on-click-right": "/home/bren/.local/bin/toggle-wifi",
+        "on-click-right": "$HOME/.local/bin/toggle-wifi",
         "tooltip-format-ethernet": "Ethernet: {ipaddr}"
     },
     "bluetooth": {
@@ -83,7 +83,7 @@
         "tooltip-format": "Bluetooth açık (Bağlı cihaz yok)",
         "tooltip-format-connected": "{device_enumerate}",
         "tooltip-format-enumerate-connected": "• {device_alias}",
-        "on-click": "/home/bren/.local/bin/bluetooth-manager",
+        "on-click": "$HOME/.local/bin/bluetooth-manager",
         "on-click-right": "rfkill toggle bluetooth",
         "tooltip-format-disabled": "Bluetooth kapalı",
         "tooltip-format-off": "Bluetooth kapalı"
@@ -91,13 +91,13 @@
     "custom/system": {
         "format": "{}",
         "return-type": "json",
-        "exec": "/home/bren/.local/bin/waybar-system",
+        "exec": "$HOME/.local/bin/waybar-system",
         "interval": 2,
-        "on-click": "/home/bren/.local/bin/task-manager",
+        "on-click": "$HOME/.local/bin/task-manager",
         "tooltip": true
     },
     "backlight": {
-        "device": "intel_backlight",
+        
         "format": "{icon} {percent}%",
         "format-icons": [
             "󰃞",
@@ -106,13 +106,13 @@
         ],
         "tooltip": true,
         "tooltip-format": "Parlaklık: %{percent}\n(Sağ Tık: Açık/Koyu Tema Değiştir)",
-        "on-click-right": "/home/bren/.local/bin/toggle-theme",
-        "on-scroll-up": "/home/bren/.local/bin/change-brightness up",
-        "on-scroll-down": "/home/bren/.local/bin/change-brightness down",
+        "on-click-right": "$HOME/.local/bin/toggle-theme",
+        "on-scroll-up": "$HOME/.local/bin/change-brightness up",
+        "on-scroll-down": "$HOME/.local/bin/change-brightness down",
         "min-length": 6
     },
     "battery": {
-        "on-click": "/home/bren/.local/bin/power-menu",
+        "on-click": "$HOME/.local/bin/power-menu",
         "states": {
             "good": 95,
             "warning": 30,
@@ -143,7 +143,7 @@
         "format": "{icon} {volume}%",
         "tooltip": true,
         "format-muted": "  Muted",
-        "on-click": "/home/bren/.local/bin/audio-mixer",
+        "on-click": "$HOME/.local/bin/audio-mixer",
         "on-click-right": "pamixer -t",
         "on-scroll-up": "pamixer -i 1",
         "on-scroll-down": "pamixer -d 1",
@@ -169,6 +169,6 @@
         "format": "",
         "tooltip": false,
         "tooltip-format": "Güç ve Oturum Menüsü",
-        "on-click": "/home/bren/.local/bin/power-session"
+        "on-click": "$HOME/.local/bin/power-session"
     }
 }

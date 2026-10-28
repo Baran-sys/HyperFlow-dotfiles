@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# HyprFlow — Hyprland Desktop Environment & Custom Applets Installer
+# HyprFlow — Universal Hyprland Desktop Environment & Custom Applets Installer
 # ==============================================================================
 
 set -e
@@ -25,7 +25,7 @@ echo "  ██╔══██║  ╚██╔╝  ██╔═══╝ ██�
 echo "  ██║  ██║   ██║   ██║     ██║  ██║██║     ███████╗╚██████╔╝╚███╔███╔╝"
 echo "  ╚═╝  ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ "
 echo -e "${NC}"
-echo -e "${BOLD}HyprFlow — Hyprland Desktop Environment & Custom Applets Installer${NC}\n"
+echo -e "${BOLD}HyprFlow — Universal Hyprland Desktop Environment & Custom Applets Installer${NC}\n"
 
 # ------------------------------------------------------------------------------
 # 1. Package Installation
@@ -125,18 +125,46 @@ backup_configs() {
 }
 
 # ------------------------------------------------------------------------------
-# 3. Copy Config Files & Normalize User Paths
+# 3. Copy Config Files & Auto-Configure Hardware / Monitor Specs
 # ------------------------------------------------------------------------------
 copy_dotfiles() {
     echo -e "\n${BLUE}[3/5] Yapılandırma dosyaları ~/.config dizinine kopyalanıyor...${NC}"
     mkdir -p "${HOME}/.config"
 
+    # Preserve existing user monitor/workspace overrides if present
+    local saved_monitors=""
+    local saved_workspaces=""
+    if [ -s "${HOME}/.config/hypr/monitors.conf" ]; then
+        saved_monitors=$(cat "${HOME}/.config/hypr/monitors.conf")
+    fi
+    if [ -s "${HOME}/.config/hypr/workspaces.conf" ]; then
+        saved_workspaces=$(cat "${HOME}/.config/hypr/workspaces.conf")
+    fi
+
     cp -ra "${SCRIPT_DIR}/.config/"* "${HOME}/.config/"
 
-    # Normalize hardcoded user home paths if installing on another username
-    if [ "${HOME}" != "/home/bren" ]; then
-        find "${HOME}/.config/hypr" "${HOME}/.config/waybar" "${HOME}/.config/dunst" "${HOME}/.config/rofi" \
-            -type f -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
+    touch "${HOME}/.config/hypr/monitors.conf"
+    touch "${HOME}/.config/hypr/workspaces.conf"
+
+    if [ -n "$saved_monitors" ]; then
+        echo "$saved_monitors" > "${HOME}/.config/hypr/monitors.conf"
+    elif [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] && command -v hyprctl &>/dev/null && command -v jq &>/dev/null; then
+        # Auto-detect primary monitor highest refresh rate & resolution for monitors.conf
+        local mon_spec
+        mon_spec=$(hyprctl monitors -j 2>/dev/null | jq -r '
+            (.[0] // empty) |
+            if .name then
+                "monitor=\(.name),\(.width)x\(.height)@\( (.refreshRate | round) ),auto,\(.scale)"
+            else empty end
+        ' 2>/dev/null || true)
+        if [ -n "$mon_spec" ]; then
+            echo "$mon_spec" > "${HOME}/.config/hypr/monitors.conf"
+            echo -e "  ✓ Monitör otomatik algılandı ve kaydedildi: ${CYAN}${mon_spec}${NC}"
+        fi
+    fi
+
+    if [ -n "$saved_workspaces" ]; then
+        echo "$saved_workspaces" > "${HOME}/.config/hypr/workspaces.conf"
     fi
 
     echo -e "${GREEN}✓ ~/.config dosyaları başarıyla yerleştirildi.${NC}"
@@ -154,9 +182,6 @@ install_scripts_and_apps() {
     # Copy scripts
     if [ -d "${SCRIPT_DIR}/.local/bin" ]; then
         cp -ra "${SCRIPT_DIR}/.local/bin/"* "${HOME}/.local/bin/"
-        if [ "${HOME}" != "/home/bren" ]; then
-            find "${HOME}/.local/bin" -maxdepth 1 -type f -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
-        fi
         chmod +x "${HOME}/.local/bin/"*
         echo -e "  ✓ Betikler ve appletler ~/.local/bin/ içine yüklendi (chmod +x uygulandı)."
     fi
@@ -170,9 +195,6 @@ install_scripts_and_apps() {
     # Copy desktop applications (with NoDisplay=true on Waybar applets so Spotlight stays clean)
     if [ -d "${SCRIPT_DIR}/.local/share/applications" ]; then
         cp -ra "${SCRIPT_DIR}/.local/share/applications/"* "${HOME}/.local/share/applications/"
-        if [ "${HOME}" != "/home/bren" ]; then
-            find "${HOME}/.local/share/applications" -maxdepth 1 -name "*.desktop" -exec sed -i "s|/home/bren|${HOME}|g" {} + 2>/dev/null || true
-        fi
         echo -e "  ✓ Masaüstü girişleri ~/.local/share/applications/ içine yüklendi."
         if command -v update-desktop-database &>/dev/null; then
             update-desktop-database "${HOME}/.local/share/applications" &>/dev/null || true
@@ -190,10 +212,23 @@ install_scripts_and_apps() {
         echo -e "  ✓ Varsayılan MIME dosya ilişkilendirmeleri (text/plain, inode/x-empty, inode/directory) yapılandırıldı."
     fi
 
-    # Ensure Desktop folder exists
-    mkdir -p "${HOME}/Masaüstü" 2>/dev/null || true
+    # Ensure XDG Desktop folder exists
+    local desktop_dir="${HOME}/Masaüstü"
+    if command -v xdg-user-dir &>/dev/null; then
+        desktop_dir="$(xdg-user-dir DESKTOP 2>/dev/null || echo "${HOME}/Masaüstü")"
+    fi
+    mkdir -p "$desktop_dir" 2>/dev/null || true
 
-    # Verify ~/.local/bin is in PATH
+    # Enable essential system services if systemd is active
+    if command -v systemctl &>/dev/null; then
+        for svc in bluetooth power-profiles-daemon NetworkManager; do
+            if systemctl list-unit-files "${svc}.service" &>/dev/null; then
+                systemctl is-active --quiet "${svc}.service" || sudo systemctl enable --now "${svc}.service" &>/dev/null || true
+            fi
+        done
+    fi
+
+    # Ensure ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then
         echo -e "${YELLOW}UYARI: ~/.local/bin dizini PATH ortam değişkeninizde görünmüyor.${NC}"
         echo -e "Kabuk ayar dosyanıza (örn: ~/.zshrc veya ~/.bashrc) şu satırı ekleyin:"

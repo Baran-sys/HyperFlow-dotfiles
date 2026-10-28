@@ -3,8 +3,7 @@ Type=Application
 Name=Spotify
 GenericName=Music Player
 Icon=spotify
-TryExec=/home/bren/.local/bin/spotify
-Exec=/home/bren/.local/bin/spotify --password-store=basic --enable-features=UseOzonePlatform --ozone-platform=wayland --uri=%u
+Exec=spotify --password-store=basic --enable-features=UseOzonePlatform --ozone-platform=wayland --uri=%u
 Terminal=false
 MimeType=x-scheme-handler/spotify;
 Categories=Audio;Music;Player;AudioVideo;

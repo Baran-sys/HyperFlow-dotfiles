@@ -129,7 +129,7 @@ class CalendarWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self)
+            SmartFocus.setup(self, align="left", offset=12)
         except Exception:
             pass
 

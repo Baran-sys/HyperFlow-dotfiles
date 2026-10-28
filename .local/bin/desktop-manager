@@ -394,15 +394,29 @@ class DesktopManager(Gtk.Window):
         self.save_positions()
         self.darea.queue_draw()
 
-    def get_max_rows(self):
+    def get_screen_size(self):
         alloc = self.get_allocation()
-        h = alloc.height if alloc.height > 200 else 824
+        if alloc.width > 200 and alloc.height > 200:
+            return alloc.width, alloc.height
+        try:
+            display = Gdk.Display.get_default()
+            if display:
+                mon = display.get_primary_monitor() or display.get_monitor(0)
+                if mon:
+                    geom = mon.get_geometry()
+                    if geom.width > 200 and geom.height > 200:
+                        return geom.width, geom.height
+        except Exception:
+            pass
+        return 1920, 1080
+
+    def get_max_rows(self):
+        _, h = self.get_screen_size()
         usable_h = max(CELL_H, h - MARGIN_TOP - MARGIN_BOTTOM)
         return max(1, usable_h // CELL_H)
 
     def get_max_cols(self):
-        alloc = self.get_allocation()
-        w = alloc.width if alloc.width > 200 else 1536
+        w, _ = self.get_screen_size()
         usable_w = max(CELL_W, w - MARGIN_LEFT - MARGIN_RIGHT)
         return max(1, usable_w // CELL_W)
 
@@ -583,9 +597,7 @@ class DesktopManager(Gtk.Window):
         cr.restore()
 
     def open_context_menu(self, x: float, y: float, entries: list, folder_item=None):
-        alloc = self.get_allocation()
-        sw = alloc.width if alloc.width > 200 else 1536
-        sh = alloc.height if alloc.height > 200 else 824
+        sw, sh = self.get_screen_size()
 
         menu_w = 206.0
         cur_y = 6.0
@@ -735,18 +747,14 @@ class DesktopManager(Gtk.Window):
         cr.restore()
 
     def get_modal_geometry(self):
-        alloc = self.get_allocation()
-        sw = alloc.width if alloc.width > 200 else 1536
-        sh = alloc.height if alloc.height > 200 else 824
+        sw, sh = self.get_screen_size()
         mw, mh = 340, 168
         mx = (sw - mw) / 2.0
         my = (sh - mh) / 2.0
         return mx, my, mw, mh
 
     def draw_modal(self, cr):
-        alloc = self.get_allocation()
-        sw = alloc.width if alloc.width > 200 else 1536
-        sh = alloc.height if alloc.height > 200 else 824
+        sw, sh = self.get_screen_size()
 
         p = max(0.0, min(1.0, self.modal_progress))
         scale = 0.86 + 0.14 * p
@@ -1158,9 +1166,7 @@ class DesktopManager(Gtk.Window):
                 self.ensure_animation_loop()
 
             if self.is_dragging_icon:
-                alloc = self.get_allocation()
-                sw = alloc.width if alloc.width > 200 else 1536
-                sh = alloc.height if alloc.height > 200 else 824
+                sw, sh = self.get_screen_size()
                 if event.x <= 18 or event.y <= 18 or event.x >= sw - 18 or event.y >= sh - 18:
                     self.start_external_drag(event)
                     return True

@@ -8,6 +8,7 @@ fast_toggle_or_lock("power-menu")
 import sys
 import os
 import re
+import glob
 import json
 import subprocess
 import threading
@@ -251,7 +252,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self)
+            SmartFocus.setup(self, align="right", offset=286)
         except Exception:
             pass
 
@@ -379,36 +380,112 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
             self.refresh_ui()
         return True
 
+    def get_battery_dir(self):
+        for p in sorted(glob.glob("/sys/class/power_supply/BAT*")):
+            if os.path.isdir(p):
+                return p
+        for p in sorted(glob.glob("/sys/class/power_supply/*")):
+            t_file = os.path.join(p, "type")
+            if os.path.isfile(t_file):
+                try:
+                    if open(t_file).read().strip() == "Battery":
+                        return p
+                except Exception:
+                    pass
+        return None
+
+    def get_monitor_info(self):
+        mon_name = "eDP-1"
+        width = 1920
+        height = 1080
+        scale = 1.0
+        current_hz = 60
+        available_hz = []
+        try:
+            res = subprocess.check_output(["hyprctl", "monitors", "-j"], timeout=0.5).decode()
+            data = json.loads(res)
+            if data and len(data) > 0:
+                m = next((x for x in data if x.get("focused")), data[0])
+                mon_name = m.get("name", "eDP-1")
+                width = int(m.get("width", 1920))
+                height = int(m.get("height", 1080))
+                scale = float(m.get("scale", 1.0))
+                current_hz = int(round(float(m.get("refreshRate", 60))))
+                res_prefix = f"{width}x{height}@"
+                hz_set = set()
+                for mode in m.get("availableModes", []):
+                    if mode.startswith(res_prefix) and "Hz" in mode:
+                        try:
+                            hz_str = mode.split("@", 1)[1].replace("Hz", "").strip()
+                            hz_val = int(round(float(hz_str)))
+                            if hz_val >= 50:
+                                hz_set.add(hz_val)
+                        except Exception:
+                            pass
+                available_hz = sorted(hz_set, reverse=True)
+        except Exception:
+            pass
+        if not available_hz:
+            available_hz = sorted({current_hz, 60}, reverse=True)
+        return mon_name, width, height, scale, current_hz, available_hz
+
+    def get_dynamic_refresh_rates(self, available_hz, current_hz):
+        if len(available_hz) >= 2:
+            max_hz = max(available_hz)
+            low_hz = 60 if 60 in available_hz and max_hz != 60 else min(available_hz)
+            if max_hz != low_hz:
+                return [
+                    {
+                        "hz": max_hz,
+                        "name": f"{max_hz} Hz (Akıcı Mod)",
+                        "desc": "Maksimum akıcılık, oyun ve animasyon",
+                        "icon": "video-display-symbolic"
+                    },
+                    {
+                        "hz": low_hz,
+                        "name": f"{low_hz} Hz (Pil Tasarrufu)",
+                        "desc": "Düşük ekran tüketimi, uzun pil",
+                        "icon": "battery-symbolic"
+                    }
+                ]
+        hz_only = available_hz[0] if available_hz else current_hz
+        return [
+            {
+                "hz": hz_only,
+                "name": f"{hz_only} Hz (Standart Mod)",
+                "desc": "Monitör varsayılan yenileme hızı",
+                "icon": "video-display-symbolic"
+            }
+        ]
+
     def get_current_profile(self):
         try:
             return subprocess.check_output(["powerprofilesctl", "get"]).decode().strip()
         except Exception:
             return "balanced"
 
-    def get_current_refresh_rate(self):
-        try:
-            res = subprocess.check_output(["hyprctl", "monitors", "-j"]).decode()
-            data = json.loads(res)
-            if data and len(data) > 0:
-                return int(round(data[0].get("refreshRate", 165)))
-        except Exception:
-            pass
-        return 165
-
-    def get_battery_time_info(self, status):
+    def get_battery_time_info(self, status, bat_dir):
         time_badge = ""
         badge_style = "badge-time"
         time_detail = ""
-        # Instant sysfs calculation
+        if not bat_dir:
+            return "Masaüstü • Prizde", "badge-full", "Doğrudan güç kaynağına bağlı"
         try:
             if status == "Full":
                 time_badge = "Prizde • Tam Dolu"
                 badge_style = "badge-full"
                 time_detail = "Pil tam dolu, şarj aleti takılı"
             else:
-                c_now = int(open("/sys/class/power_supply/BAT1/charge_now").read().strip())
-                curr = int(open("/sys/class/power_supply/BAT1/current_now").read().strip())
-                c_full = int(open("/sys/class/power_supply/BAT1/charge_full").read().strip())
+                def _read_int(names):
+                    for n in names:
+                        p = os.path.join(bat_dir, n)
+                        if os.path.exists(p):
+                            return int(open(p).read().strip())
+                    return 0
+
+                c_now = _read_int(["charge_now", "energy_now"])
+                curr = _read_int(["current_now", "power_now"])
+                c_full = _read_int(["charge_full", "energy_full"])
                 if curr > 0:
                     if status == "Discharging":
                         mins = int((c_now / curr) * 60)
@@ -455,46 +532,48 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
 
     def refresh_ui(self):
         current_prof = self.get_current_profile()
-        current_hz = self.get_current_refresh_rate()
+        mon_name, width, height, scale, current_hz, available_hz = self.get_monitor_info()
+        dynamic_rates = self.get_dynamic_refresh_rates(available_hz, current_hz)
 
         self.header.set_subtitle(f"{current_prof.capitalize()}  •  {current_hz} Hz")
-        self.lbl_footer.set_text(f"Plan: {current_prof.capitalize()}  •  Ekran: {current_hz} Hz (eDP-1)")
+        self.lbl_footer.set_text(f"Plan: {current_prof.capitalize()}  •  Ekran: {current_hz} Hz ({mon_name})")
 
         # Battery status & time calculation
+        bat_dir = self.get_battery_dir()
         try:
-            cap_file = "/sys/class/power_supply/BAT1/capacity"
-            status_file = "/sys/class/power_supply/BAT1/status"
-            cap = "100"
-            status = "Full"
-            if os.path.exists(cap_file):
-                with open(cap_file, 'r') as fc:
-                    cap = fc.read().strip()
-            if os.path.exists(status_file):
-                with open(status_file, 'r') as fs:
-                    status = fs.read().strip()
+            if bat_dir:
+                cap_file = os.path.join(bat_dir, "capacity")
+                status_file = os.path.join(bat_dir, "status")
+                cap = open(cap_file).read().strip() if os.path.exists(cap_file) else "100"
+                status = open(status_file).read().strip() if os.path.exists(status_file) else "Full"
+                cap_int = int(cap) if cap.isdigit() else 100
+                icon = self.get_battery_icon(cap_int, status)
+                self.lbl_pct.set_text(f"{icon}  %{cap}")
 
-            cap_int = int(cap) if cap.isdigit() else 100
-            icon = self.get_battery_icon(cap_int, status)
-            self.lbl_pct.set_text(f"{icon}  %{cap}")
+                time_badge, badge_style, time_detail = self.get_battery_time_info(status, bat_dir)
 
-            time_badge, badge_style, time_detail = self.get_battery_time_info(status)
+                if status == "Charging":
+                    status_tr = f"Durum: Şarj Oluyor ({time_detail})" if time_detail else "Durum: Şarj Oluyor"
+                elif status == "Full":
+                    status_tr = "Durum: Tam Dolu (Prize Takılı)"
+                else:
+                    status_tr = f"Durum: Pilde Çalışıyor ({time_detail})" if time_detail else "Durum: Pilde Çalışıyor"
+                self.lbl_status.set_text(status_tr)
 
-            if status == "Charging":
-                status_tr = f"Durum: Şarj Oluyor ({time_detail})" if time_detail else "Durum: Şarj Oluyor"
-            elif status == "Full":
-                status_tr = "Durum: Tam Dolu (Prize Takılı)"
+                self.lbl_time_badge.get_style_context().remove_class("badge-time")
+                self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
+                self.lbl_time_badge.get_style_context().remove_class("badge-full")
+                self.lbl_time_badge.get_style_context().add_class(badge_style)
+                self.lbl_time_badge.set_text(time_badge)
+                self.lbl_time_badge.show()
             else:
-                status_tr = f"Durum: Pilde Çalışıyor ({time_detail})" if time_detail else "Durum: Pilde Çalışıyor"
-            self.lbl_status.set_text(status_tr)
-
-            # Update badge
-            self.lbl_time_badge.get_style_context().remove_class("badge-time")
-            self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
-            self.lbl_time_badge.get_style_context().remove_class("badge-full")
-            self.lbl_time_badge.get_style_context().add_class(badge_style)
-            self.lbl_time_badge.set_text(time_badge)
-            self.lbl_time_badge.show()
-
+                self.lbl_pct.set_text("󰚥  AC Güç")
+                self.lbl_status.set_text("Durum: Masaüstü / Doğrudan Güç Kaynağı")
+                self.lbl_time_badge.get_style_context().remove_class("badge-time")
+                self.lbl_time_badge.get_style_context().remove_class("badge-discharging")
+                self.lbl_time_badge.get_style_context().add_class("badge-full")
+                self.lbl_time_badge.set_text("Prizde")
+                self.lbl_time_badge.show()
         except Exception:
             self.lbl_pct.set_text("󰁹  %100")
             self.lbl_status.set_text("Durum: Prize Takılı")
@@ -504,8 +583,8 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         for child in self.listbox_hz.get_children():
             self.listbox_hz.remove(child)
 
-        for r in REFRESH_RATES:
-            is_active = (r["hz"] == current_hz)
+        for r in dynamic_rates:
+            is_active = (abs(r["hz"] - current_hz) <= 1)
             row = Gtk.ListBoxRow()
             if is_active:
                 row.get_style_context().add_class("hz-active")
@@ -612,20 +691,30 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
     def set_refresh_rate(self, hz):
         def _apply_hz():
             try:
-                subprocess.run(["hyprctl", "keyword", "monitor", f"eDP-1,1920x1080@{hz},auto,1.25"], check=True)
+                mon_name, width, height, scale, _cur_hz, _avail = self.get_monitor_info()
+                scale_str = f"{scale:g}"
+                mon_spec = f"{mon_name},{width}x{height}@{hz},auto,{scale_str}"
+                subprocess.run(["hyprctl", "keyword", "monitor", mon_spec], check=True)
 
-                conf_path = os.path.expanduser("~/.config/hypr/hyprland.conf")
-                if os.path.exists(conf_path):
-                    with open(conf_path, "r") as f:
-                        lines = f.readlines()
-                    new_lines = []
-                    for line in lines:
-                        if line.strip().startswith("monitor=eDP-1,"):
-                            new_lines.append(f"monitor=eDP-1,1920x1080@{hz},auto,1.25\n")
-                        else:
-                            new_lines.append(line)
-                    with open(conf_path, "w") as f:
-                        f.writelines(new_lines)
+                for conf_path in (
+                    os.path.expanduser("~/.config/hypr/monitors.conf"),
+                    os.path.expanduser("~/.config/hypr/hyprland.conf"),
+                ):
+                    if os.path.exists(conf_path):
+                        with open(conf_path, "r") as f:
+                            lines = f.readlines()
+                        new_lines = []
+                        replaced = False
+                        for line in lines:
+                            if line.strip().startswith(f"monitor={mon_name},") or line.strip().startswith(f"monitor = {mon_name},"):
+                                new_lines.append(f"monitor={mon_spec}\n")
+                                replaced = True
+                            else:
+                                new_lines.append(line)
+                        if replaced:
+                            with open(conf_path, "w") as f:
+                                f.writelines(new_lines)
+                            break
             except Exception as e:
                 print(f"Error setting refresh rate: {e}")
             GLib.idle_add(self.refresh_ui)

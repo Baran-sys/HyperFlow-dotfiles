@@ -179,7 +179,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self)
+            SmartFocus.setup(self, align="right", offset=12)
         except Exception:
             pass
         self.selected_pid = None
@@ -240,29 +240,29 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         card_ram.pack_start(self.pb_ram, False, False, 0)
         metrics_box.pack_start(card_ram, True, True, 0)
 
-        # 3. GPU Card (RTX 4060 + Intel UHD)
-        card_gpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        card_gpu.get_style_context().add_class("metric-card")
-        card_gpu.set_tooltip_text("GPU (NVIDIA RTX 4060 + Intel UHD)")
+        # 3. GPU Card (Universal: NVIDIA / AMD / Intel)
+        self.card_gpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.card_gpu.get_style_context().add_class("metric-card")
+        self.card_gpu.set_tooltip_text("Ekran Kartı (GPU)")
         h_gpu = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         lbl_gpu_t = Gtk.Label(label="GPU")
         lbl_gpu_t.get_style_context().add_class("metric-title")
-        self.lbl_gpu_v = Gtk.Label(label="%0 (0°C)")
+        self.lbl_gpu_v = Gtk.Label(label="%0")
         self.lbl_gpu_v.get_style_context().add_class("metric-value")
         h_gpu.pack_start(lbl_gpu_t, False, False, 0)
         h_gpu.pack_end(self.lbl_gpu_v, False, False, 0)
-        card_gpu.pack_start(h_gpu, False, False, 0)
+        self.card_gpu.pack_start(h_gpu, False, False, 0)
         self.pb_gpu = Gtk.ProgressBar()
         self.pb_gpu.get_style_context().add_class("progress-gpu")
-        card_gpu.pack_start(self.pb_gpu, False, False, 0)
-        metrics_box.pack_start(card_gpu, True, True, 0)
+        self.card_gpu.pack_start(self.pb_gpu, False, False, 0)
+        metrics_box.pack_start(self.card_gpu, True, True, 0)
 
         main_box.pack_start(metrics_box, False, False, 0)
 
         # Search Entry
         self.search_entry = Gtk.SearchEntry()
         self.search_entry.get_style_context().add_class("search-box")
-        self.search_entry.set_placeholder_text("İşlem ara (İsim, PID veya 'nvidia', 'intel')...")
+        self.search_entry.set_placeholder_text("İşlem ara (İsim, PID, GPU veya kullanıcı)...")
         self.search_entry.connect("search-changed", self.on_search_changed)
         main_box.pack_start(self.search_entry, False, False, 0)
 
@@ -469,12 +469,16 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
 
     def _worker_collect_data(self):
         try:
-            # 1. GPU metrics & processes
+            # 1. Universal GPU metrics & processes (NVIDIA / AMD / Intel)
             now = time.time()
             gpu_devices = {}
             gpu_usage = {}
             nv_util = 0
             nv_temp = 0
+            amd_util = 0
+            amd_temp = 0
+            intel_mhz = 0
+            intel_max_mhz = 1400
 
             try:
                 out = subprocess.check_output(
@@ -488,11 +492,28 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             except Exception:
                 pass
 
-            # Intel GPU freq
-            intel_mhz = 0
+            # Universal DRM sysfs scan for Intel (gt_act_freq_mhz) & AMD (gpu_busy_percent)
+            for card_dir in glob.glob("/sys/class/drm/card[0-9]*"):
+                for fpath in glob.glob(os.path.join(card_dir, "**/gt_act_freq_mhz"), recursive=True):
+                    try:
+                        intel_mhz = max(intel_mhz, int(open(fpath).read().strip()))
+                        max_p = os.path.join(os.path.dirname(fpath), "gt_max_freq_mhz")
+                        if os.path.exists(max_p):
+                            intel_max_mhz = max(300, int(open(max_p).read().strip()))
+                    except Exception:
+                        pass
+                busy_path = os.path.join(card_dir, "device/gpu_busy_percent")
+                if os.path.exists(busy_path):
+                    try:
+                        amd_util = max(amd_util, int(open(busy_path).read().strip()))
+                    except Exception:
+                        pass
+
+            # Fallback GPU temp from psutil if NVIDIA temp isn't active
             try:
-                with open("/sys/class/drm/card1/device/drm/card1/gt_act_freq_mhz", "r") as f:
-                    intel_mhz = int(f.read().strip())
+                temps = psutil.sensors_temperatures() or {}
+                if "amdgpu" in temps and temps["amdgpu"]:
+                    amd_temp = int(round(temps["amdgpu"][0].current))
             except Exception:
                 pass
 
@@ -523,7 +544,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
             except Exception:
                 pass
 
-            # Intel i915 DRM fdinfo tracking (fast background scan)
+            # DRM fdinfo tracking for Intel (i915/xe) & AMD (amdgpu)
             new_intel_times = {}
             for pid_dir in glob.glob("/proc/[0-9]*"):
                 fdinfo = os.path.join(pid_dir, "fdinfo")
@@ -532,21 +553,25 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                 try:
                     pid = int(os.path.basename(pid_dir))
                     total_ns = 0
-                    is_intel = False
+                    drm_vendor = None
                     for f in os.listdir(fdinfo):
                         try:
                             with open(os.path.join(fdinfo, f), "r") as fp:
                                 for line in fp:
-                                    if "drm-driver:\ti915" in line:
-                                        is_intel = True
+                                    if line.startswith("drm-driver:"):
+                                        drv = line.split(":", 1)[1].strip().lower()
+                                        if drv in ("i915", "xe"):
+                                            drm_vendor = "Intel"
+                                        elif drv == "amdgpu":
+                                            drm_vendor = "AMD"
                                     elif line.startswith("drm-engine-"):
                                         pts = line.split()
                                         if len(pts) >= 2 and pts[1].isdigit():
                                             total_ns += int(pts[1])
                         except Exception:
                             pass
-                    if is_intel:
-                        gpu_devices.setdefault(pid, set()).add("Intel")
+                    if drm_vendor:
+                        gpu_devices.setdefault(pid, set()).add(drm_vendor)
                         new_intel_times[pid] = (now, total_ns)
                         if pid in self.intel_gpu_times:
                             prev_time, prev_ns = self.intel_gpu_times[pid]
@@ -577,13 +602,17 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                     dev_set = gpu_devices.get(pid, set())
                     g_pct = gpu_usage.get(pid, 0.0)
 
-                    if "NVIDIA" in dev_set and "Intel" in dev_set:
+                    if len(dev_set) > 1:
                         dev_str = "Hibrit"
                         markup = "<span foreground='#cba6f7' weight='bold'>Hibrit</span>"
                         gpu_count += 1
                     elif "NVIDIA" in dev_set:
                         dev_str = "NVIDIA"
                         markup = "<span foreground='#a6e3a1' weight='bold'>NVIDIA</span>"
+                        gpu_count += 1
+                    elif "AMD" in dev_set:
+                        dev_str = "AMD"
+                        markup = "<span foreground='#f38ba8' weight='bold'>AMD</span>"
                         gpu_count += 1
                     elif "Intel" in dev_set:
                         dev_str = "Intel"
@@ -598,21 +627,23 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
                     continue
 
             # 3. Post to GTK main thread
-            GLib.idle_add(self._apply_data, new_data, gpu_count, nv_util, nv_temp, intel_mhz)
+            GLib.idle_add(self._apply_data, new_data, gpu_count, nv_util, nv_temp, amd_util, amd_temp, intel_mhz, intel_max_mhz)
         finally:
             self._is_refreshing = False
 
-    def _apply_data(self, new_data, gpu_count, nv_util, nv_temp, intel_mhz):
+    def _apply_data(self, new_data, gpu_count, nv_util, nv_temp, amd_util, amd_temp, intel_mhz, intel_max_mhz):
         try:
-            gpu_disp = max(nv_util, int(round((intel_mhz / 1400.0) * 100))) if intel_mhz > 0 else nv_util
-            self.lbl_gpu_v.set_text(f"%{gpu_disp} (NV: {nv_temp}°C)")
+            intel_pct = int(round((intel_mhz / float(max(1, intel_max_mhz))) * 100)) if intel_mhz > 0 else 0
+            gpu_disp = max(nv_util, amd_util, min(100, intel_pct))
+            gpu_temp = nv_temp if nv_temp > 0 else amd_temp
+            gpu_temp_str = f" ({gpu_temp}°C)" if gpu_temp > 0 else ""
+            self.lbl_gpu_v.set_text(f"%{gpu_disp}{gpu_temp_str}")
             self.pb_gpu.set_fraction(min(max(gpu_disp / 100.0, 0.0), 1.0))
 
             cpu_pct = psutil.cpu_percent()
             cpu_temp = self.get_cpu_temp()
             temp_str = f" ({cpu_temp}°C)" if cpu_temp is not None else ""
             mem = psutil.virtual_memory()
-            gpu_temp_str = f" ({nv_temp}°C)" if nv_temp > 0 else ""
             self.header.set_subtitle(f"CPU: %{cpu_pct:.0f}{temp_str}  •  RAM: %{mem.percent:.0f}  •  GPU: %{gpu_disp}{gpu_temp_str}")
 
             self.store.clear()
