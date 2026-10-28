@@ -29,6 +29,13 @@ def fast_toggle_or_lock(app_name):
     my_pid = os.getpid()
     lock_file = os.path.join(LOCK_DIR, f"{app_name}.pid")
 
+    # Clean up any lingering Hyprland mouse binds
+    try:
+        subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
     if os.path.exists(lock_file):
         try:
             with open(lock_file, "r") as f:
@@ -129,36 +136,59 @@ class SmartFocus:
     @classmethod
     def position_applet(cls, window, default_w, default_h, align="right", offset=12, top_margin=46):
         """
-        Fallback positioning helper (Hyprland windowrules handle this natively at map time).
+        Universal monitor-aware positioning helper:
+        Computes the target x, y for the currently focused monitor.
+        Also dispatches movewindowpixel if needed to guarantee exact placement.
         """
-        pass
+        try:
+            import json
+            res = subprocess.check_output(["hyprctl", "monitors", "-j"], timeout=0.3).decode()
+            monitors = json.loads(res)
+            if monitors:
+                mon = next((m for m in monitors if m.get("focused")), monitors[0])
+                scale = float(mon.get("scale", 1.0)) or 1.0
+                eff_w = int(round(float(mon.get("width", 1920)) / scale))
+                if align == "left":
+                    x = max(8, int(offset))
+                elif align == "center":
+                    x = max(8, (eff_w - default_w) // 2 + int(offset))
+                else:
+                    x = max(8, eff_w - default_w - int(offset))
+                y = int(top_margin)
+                window._applet_x = x
+                window._applet_y = y
+                window._applet_w = default_w
+                window._applet_h = default_h
+                subprocess.Popen(
+                    ["hyprctl", "dispatch", "movewindowpixel", f"exact {x} {y},pid:{os.getpid()}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+                return x, y
+        except Exception:
+            pass
+        return None, None
 
     @classmethod
     def setup(cls, window, align=None, offset=12):
         cleaned_up = [False]
+        my_pid = os.getpid()
+
+        # Calculate coordinates dynamically if align is specified
+        if align is not None:
+            w, h = window.get_size()
+            cls.position_applet(window, w or 380, h or 440, align=align, offset=offset)
 
         def _cleanup(*args):
             if not cleaned_up[0]:
                 cleaned_up[0] = True
+                try:
+                    subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
 
         window.connect("destroy", _cleanup)
         atexit.register(_cleanup)
-
-        # Monitor Hyprland active window: if window loses focus, close immediately
-        def _poll_focus():
-            if cleaned_up[0]:
-                return False
-            if getattr(window, "ready_to_close", False) and not getattr(window, "is_showing_dialog", False):
-                if not window.is_active():
-                    window.close()
-                    return False
-            return True
-
-        try:
-            from gi.repository import GLib
-            GLib.timeout_add(200, _poll_focus)
-        except Exception:
-            pass
 
         # Handle SIGTERM
         try:
@@ -170,6 +200,76 @@ class SmartFocus:
                 else:
                     sys.exit(0)
             signal.signal(signal.SIGTERM, _on_sigterm)
+        except Exception:
+            pass
+
+        # Handle Outside Clicks:
+        # Non-consuming Hyprland binds send SIGUSR1 to our process on mouse click anywhere.
+        def _on_mouse_click(signum, frame):
+            if cleaned_up[0]:
+                return
+            if not getattr(window, "ready_to_close", False):
+                return
+            if getattr(window, "is_showing_dialog", False):
+                return
+            try:
+                pos_raw = subprocess.check_output(["hyprctl", "cursorpos"], timeout=0.15).decode().strip()
+                parts = [int(p.strip()) for p in pos_raw.split(",")]
+                cx, cy = parts[0], parts[1]
+
+                wx = getattr(window, "_applet_x", None)
+                wy = getattr(window, "_applet_y", 46)
+                ww = getattr(window, "_applet_w", None)
+                wh = getattr(window, "_applet_h", None)
+
+                if wx is None or ww is None:
+                    cur_w, cur_h = window.get_size()
+                    ww = ww or cur_w or 380
+                    wh = wh or cur_h or 440
+                    import json
+                    res = subprocess.check_output(["hyprctl", "clients", "-j"], timeout=0.15).decode()
+                    clients = json.loads(res)
+                    for c in clients:
+                        if c.get("pid") == my_pid:
+                            wx, wy = c.get("at", [wx, wy])
+                            ww, wh = c.get("size", [ww, wh])
+                            window._applet_x = wx
+                            window._applet_y = wy
+                            window._applet_w = ww
+                            window._applet_h = wh
+                            break
+
+                if wx is not None and wy is not None and ww is not None and wh is not None:
+                    if (wx - 4) <= cx <= (wx + ww + 4) and (wy - 4) <= cy <= (wy + wh + 4):
+                        # Click was inside applet bounds
+                        return
+
+                # Click was OUTSIDE applet bounds: dismiss!
+                from gi.repository import GLib
+                GLib.idle_add(window.close)
+            except Exception:
+                pass
+
+        try:
+            signal.signal(signal.SIGUSR1, _on_mouse_click)
+        except Exception:
+            pass
+
+        # Bind non-consuming mouse clicks in Hyprland after window is ready
+        def _init_mouse_binds():
+            if cleaned_up[0]:
+                return False
+            window.ready_to_close = True
+            try:
+                subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:272,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:273,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+            return False
+
+        try:
+            from gi.repository import GLib
+            GLib.timeout_add(150, _init_mouse_binds)
         except Exception:
             pass
 

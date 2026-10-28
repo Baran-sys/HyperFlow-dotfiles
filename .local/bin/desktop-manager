@@ -939,6 +939,11 @@ class DesktopManager(Gtk.Window):
 
     def _dismiss_applets(self):
         try:
+            subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+        try:
             lock_dir = "/tmp/waybar_applets"
             if os.path.exists(lock_dir):
                 import signal

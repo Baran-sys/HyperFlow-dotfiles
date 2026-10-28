@@ -261,9 +261,6 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         GLib.idle_add(_init_bt)
 
     def on_focus_out(self, widget, event):
-        if getattr(self, "ready_to_close", False) and not getattr(self, "is_showing_dialog", False):
-            self.close()
-            return True
         return False
 
     def on_key_press(self, widget, event):
