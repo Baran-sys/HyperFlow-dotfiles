@@ -173,6 +173,7 @@ def acquire_focus_lock(my_pid=None):
         my_pid = os.getpid()
     try:
         subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["hyprctl", "keyword", "cursor:no_warps", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if my_pid:
             subprocess.Popen(["hyprctl", "dispatch", "focuswindow", f"pid:{my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
@@ -184,6 +185,7 @@ def release_focus_lock(my_pid=None):
     if not is_any_other_applet_running(my_pid):
         try:
             subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(["hyprctl", "keyword", "cursor:no_warps", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 
