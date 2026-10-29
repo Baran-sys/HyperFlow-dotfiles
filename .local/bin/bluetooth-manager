@@ -538,17 +538,24 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
 
                 connected = False
                 last_err = ""
-                for attempt in range(3):
-                    res = subprocess.run(["bluetoothctl", "--timeout", "8", "connect", mac], capture_output=True, text=True)
-                    out = (res.stdout or "") + "\n" + (res.stderr or "")
-                    info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
-                    if "Connected: yes" in info_res.stdout or "Connection successful" in out:
-                        connected = True
-                        break
-                    last_err = out.strip().splitlines()[-1] if out.strip() else "Device did not respond"
-                    # Wake up / rediscover sleeping or advertisement-idle device before next attempt
-                    subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
-                    time.sleep(0.4)
+                # Attempt interactive connect with agent first
+                cmds = f"agent on\ndefault-agent\ntrust {mac}\nconnect {mac}\nquit\n"
+                subprocess.run(["bluetoothctl"], input=cmds, text=True, capture_output=True, timeout=8)
+
+                info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+                if "Connected: yes" in info_res.stdout:
+                    connected = True
+                else:
+                    for attempt in range(2):
+                        res = subprocess.run(["bluetoothctl", "--timeout", "6", "connect", mac], capture_output=True, text=True)
+                        out = (res.stdout or "") + "\n" + (res.stderr or "")
+                        info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+                        if "Connected: yes" in info_res.stdout or "Connection successful" in out:
+                            connected = True
+                            break
+                        last_err = out.strip().splitlines()[-1] if out.strip() else "Device did not respond"
+                        subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
+                        time.sleep(0.3)
 
                 if connected:
                     GLib.idle_add(self._on_action_finished, "Connected", Gtk.MessageType.INFO)
@@ -569,19 +576,31 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         self.show_info(f"Pairing with device ({mac})...", Gtk.MessageType.INFO)
         self.spinner.start()
         def t():
-            subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
-            subprocess.run(["bluetoothctl", "power", "on"], capture_output=True)
-            subprocess.run(["bluetoothctl", "--timeout", "2", "scan", "on"], capture_output=True)
-            subprocess.run(["bluetoothctl", "--timeout", "10", "pair", mac], capture_output=True)
-            subprocess.run(["bluetoothctl", "trust", mac], capture_output=True)
-            res = subprocess.run(["bluetoothctl", "--timeout", "8", "connect", mac], capture_output=True, text=True)
-            info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
-            ok = ("Connected: yes" in info_res.stdout) or (res.returncode == 0)
-            GLib.idle_add(
-                self._on_action_finished,
-                "Paired and connected!" if ok else "Pairing complete (connection failed)",
-                Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING
-            )
+            try:
+                subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
+                subprocess.run(["bluetoothctl", "power", "on"], capture_output=True)
+
+                # Interactive bluetoothctl session with default-agent registered
+                cmds = f"agent on\ndefault-agent\ntrust {mac}\npair {mac}\nconnect {mac}\nquit\n"
+                subprocess.run(["bluetoothctl"], input=cmds, text=True, capture_output=True, timeout=12)
+
+                # Verify if connected
+                info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+                ok = "Connected: yes" in info_res.stdout
+
+                if not ok:
+                    # Retry quick connect if pair succeeded but connect needed a moment
+                    res = subprocess.run(["bluetoothctl", "--timeout", "6", "connect", mac], capture_output=True, text=True)
+                    info_res = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True)
+                    ok = ("Connected: yes" in info_res.stdout) or (res.returncode == 0)
+
+                GLib.idle_add(
+                    self._on_action_finished,
+                    "Paired and connected!" if ok else "Pairing complete (connection failed)",
+                    Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING
+                )
+            except Exception as e:
+                GLib.idle_add(self._on_action_finished, f"Pairing error: {e}", Gtk.MessageType.ERROR)
         threading.Thread(target=t, daemon=True).start()
 
     def remove_device(self, mac):

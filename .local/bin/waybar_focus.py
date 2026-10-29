@@ -173,9 +173,6 @@ def acquire_focus_lock(my_pid=None):
         my_pid = os.getpid()
     try:
         subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.Popen(["hyprctl", "keyword", "cursor:no_warps", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if my_pid:
-            subprocess.Popen(["hyprctl", "dispatch", "focuswindow", f"pid:{my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -326,7 +323,6 @@ class SmartFocus:
             try:
                 subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:272,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:273,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.Popen(["hyprctl", "dispatch", "focuswindow", f"pid:{my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
             return False
