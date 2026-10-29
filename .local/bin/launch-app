@@ -1,0 +1,11 @@
+#!/bin/bash
+# Universal Smart Focus Launcher
+"$@" &
+PID=$!
+for i in {1..35}; do
+    sleep 0.02
+    if hyprctl clients -j 2>/dev/null | grep -q "\"pid\": $PID"; then
+        hyprctl --batch "keyword cursor:no_warps 1 ; dispatch focuswindow pid:$PID ; keyword cursor:no_warps 0" > /dev/null 2>&1
+        break
+    fi
+done
