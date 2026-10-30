@@ -171,7 +171,7 @@ treeview header button {
 class TaskManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Task Manager", application=app)
-        self.set_default_size(620, 440)
+        self.set_default_size(428, 441)
 
         self.connect("key-press-event", self.on_key_press)
         self.connect("focus-out-event", self.on_focus_out)
@@ -179,7 +179,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self, align="right", offset=12)
+            SmartFocus.setup(self, align="right", offset=32)
         except Exception:
             pass
         self.selected_pid = None
@@ -345,8 +345,8 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         col_pid = Gtk.TreeViewColumn("PID", cell_pid, text=0)
         col_pid.set_sort_column_id(0)
         col_pid.set_resizable(True)
-        col_pid.set_min_width(46)
-        col_pid.set_fixed_width(50)
+        col_pid.set_min_width(40)
+        col_pid.set_fixed_width(44)
         self.treeview.append_column(col_pid)
 
         # 1: Process Name
@@ -357,7 +357,7 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         col_name.set_sort_column_id(1)
         col_name.set_resizable(True)
         col_name.set_expand(True)
-        col_name.set_min_width(140)
+        col_name.set_min_width(100)
         self.treeview.append_column(col_name)
 
         # 2: CPU %
@@ -370,8 +370,8 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         )
         col_cpu.set_sort_column_id(2)
         col_cpu.set_resizable(True)
-        col_cpu.set_min_width(52)
-        col_cpu.set_fixed_width(56)
+        col_cpu.set_min_width(44)
+        col_cpu.set_fixed_width(48)
         self.treeview.append_column(col_cpu)
 
         # 3: RAM
@@ -387,8 +387,8 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         )
         col_ram.set_sort_column_id(3)
         col_ram.set_resizable(True)
-        col_ram.set_min_width(68)
-        col_ram.set_fixed_width(74)
+        col_ram.set_min_width(52)
+        col_ram.set_fixed_width(58)
         self.treeview.append_column(col_ram)
 
         # 4: GPU %
@@ -401,8 +401,8 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         )
         col_gpu.set_sort_column_id(4)
         col_gpu.set_resizable(True)
-        col_gpu.set_min_width(52)
-        col_gpu.set_fixed_width(56)
+        col_gpu.set_min_width(44)
+        col_gpu.set_fixed_width(48)
         self.treeview.append_column(col_gpu)
 
         # 5: GPU Aygıtı (NVIDIA / Intel / Hibrit)
@@ -411,8 +411,8 @@ class TaskManagerWindow(Gtk.ApplicationWindow):
         col_dev = Gtk.TreeViewColumn("GPU", cell_dev, markup=7)
         col_dev.set_sort_column_id(5)
         col_dev.set_resizable(True)
-        col_dev.set_min_width(66)
-        col_dev.set_fixed_width(72)
+        col_dev.set_min_width(52)
+        col_dev.set_fixed_width(58)
         self.treeview.append_column(col_dev)
 
         # Varsayılan sıralama: RAM azalan

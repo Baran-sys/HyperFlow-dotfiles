@@ -105,30 +105,32 @@ def fast_toggle_or_lock(app_name):
     except Exception:
         pass
 
-    # Acquire focus lock (input:follow_mouse 0) immediately
-    acquire_focus_lock(my_pid)
+    resize_mode = os.path.exists(os.path.join(LOCK_DIR, "resize_mode"))
+    if not resize_mode:
+        # Acquire focus lock (input:follow_mouse 0) immediately
+        acquire_focus_lock(my_pid)
 
-    # Close any OTHER running Waybar applets so only one applet is open at a time
-    try:
-        if os.path.exists(LOCK_DIR):
-            for fname in os.listdir(LOCK_DIR):
-                if fname.endswith(".pid") and fname != f"{app_name}.pid":
-                    other_lock = os.path.join(LOCK_DIR, fname)
-                    try:
-                        with open(other_lock, "r") as f:
-                            other_pid_str = f.read().strip()
-                        if other_pid_str:
-                            other_pid = int(other_pid_str)
-                            if other_pid != my_pid:
-                                try:
-                                    os.kill(other_pid, signal.SIGTERM)
-                                except ProcessLookupError:
-                                    pass
-                        os.remove(other_lock)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+        # Close any OTHER running Waybar applets so only one applet is open at a time
+        try:
+            if os.path.exists(LOCK_DIR):
+                for fname in os.listdir(LOCK_DIR):
+                    if fname.endswith(".pid") and fname != f"{app_name}.pid":
+                        other_lock = os.path.join(LOCK_DIR, fname)
+                        try:
+                            with open(other_lock, "r") as f:
+                                other_pid_str = f.read().strip()
+                            if other_pid_str:
+                                other_pid = int(other_pid_str)
+                                if other_pid != my_pid:
+                                    try:
+                                        os.kill(other_pid, signal.SIGTERM)
+                                    except ProcessLookupError:
+                                        pass
+                            os.remove(other_lock)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     # Clean up lockfile on exit
     def _remove_lock():
@@ -190,7 +192,7 @@ def release_focus_lock(my_pid=None):
 
 class SmartFocus:
     @classmethod
-    def position_applet(cls, window, default_w, default_h, align="right", offset=12, top_margin=46):
+    def position_applet(cls, window, default_w, default_h, align="right", offset=12, top_margin=44):
         """
         Universal monitor-aware positioning helper:
         Computes the target x, y for the currently focused monitor.
@@ -205,11 +207,11 @@ class SmartFocus:
                 scale = float(mon.get("scale", 1.0)) or 1.0
                 eff_w = int(round(float(mon.get("width", 1920)) / scale))
                 if align == "left":
-                    x = max(8, int(offset))
+                    x = max(4, int(offset))
                 elif align == "center":
-                    x = max(8, (eff_w - default_w) // 2 + int(offset))
+                    x = max(4, (eff_w - default_w) // 2 + int(offset))
                 else:
-                    x = max(8, eff_w - default_w - int(offset))
+                    x = max(4, eff_w - default_w - int(offset))
                 y = int(top_margin)
                 window._applet_x = x
                 window._applet_y = y
@@ -230,13 +232,46 @@ class SmartFocus:
         hypr_sock_ref = [None]
         hypr_watch_id = [None]
         my_pid = os.getpid()
+        resize_mode = os.path.exists(os.path.join(LOCK_DIR, "resize_mode"))
 
-        acquire_focus_lock(my_pid)
+        if not resize_mode:
+            acquire_focus_lock(my_pid)
 
         # Calculate coordinates dynamically if align is specified
         if align is not None:
             w, h = window.get_size()
             cls.position_applet(window, w or 380, h or 440, align=align, offset=offset)
+
+        if resize_mode:
+            def _save_geom(*args):
+                try:
+                    import json
+                    res = subprocess.check_output(["hyprctl", "clients", "-j"], timeout=0.15).decode()
+                    for c in json.loads(res):
+                        if c.get("pid") == my_pid:
+                            geom_file = os.path.join(LOCK_DIR, "saved_geometry.json")
+                            data = {}
+                            if os.path.exists(geom_file):
+                                try:
+                                    with open(geom_file, "r") as f:
+                                        data = json.load(f)
+                                except Exception:
+                                    data = {}
+                            data[_CURRENT_APP_NAME or str(my_pid)] = {
+                                "at": c.get("at"),
+                                "size": c.get("size"),
+                                "class": c.get("class")
+                            }
+                            with open(geom_file, "w") as f:
+                                json.dump(data, f, indent=2)
+                            break
+                except Exception:
+                    pass
+                return False
+
+            window.connect("configure-event", _save_geom)
+            window.connect("destroy", _save_geom)
+            return
 
         def _cleanup(*args, record=True):
             if not cleaned_up[0]:

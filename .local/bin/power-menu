@@ -258,7 +258,7 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self, align="right", offset=286)
+            SmartFocus.setup(self, align="right", offset=166)
         except Exception:
             pass
 

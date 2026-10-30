@@ -167,7 +167,7 @@ row:selected {
 class BluetoothManagerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(title="Bluetooth Manager", application=app)
-        self.set_default_size(380, 440)
+        self.set_default_size(429, 440)
 
         self.devices = []
         self.is_scanning = False
@@ -179,7 +179,7 @@ class BluetoothManagerWindow(Gtk.ApplicationWindow):
         GLib.timeout_add(250, lambda: setattr(self, "ready_to_close", True) or False)
         try:
             from waybar_focus import SmartFocus
-            SmartFocus.setup(self, align="right", offset=236)
+            SmartFocus.setup(self, align="right", offset=230)
         except Exception:
             pass
 
