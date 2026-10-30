@@ -7,7 +7,9 @@ Waybar Smart Focus & Dynamic Theming Helper (Ultra-Optimized)
 """
 import os
 import sys
+import glob
 import time
+import socket
 import atexit
 import signal
 import subprocess
@@ -225,6 +227,8 @@ class SmartFocus:
     @classmethod
     def setup(cls, window, align=None, offset=12):
         cleaned_up = [False]
+        hypr_sock_ref = [None]
+        hypr_watch_id = [None]
         my_pid = os.getpid()
 
         acquire_focus_lock(my_pid)
@@ -234,16 +238,66 @@ class SmartFocus:
             w, h = window.get_size()
             cls.position_applet(window, w or 380, h or 440, align=align, offset=offset)
 
-        def _cleanup(*args):
+        def _cleanup(*args, record=True):
             if not cleaned_up[0]:
                 cleaned_up[0] = True
-                record_closed(_CURRENT_APP_NAME)
+                if record:
+                    record_closed(_CURRENT_APP_NAME)
+                # Close Hyprland IPC watcher if active
                 try:
-                    subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if hypr_watch_id[0] is not None:
+                        from gi.repository import GLib
+                        GLib.source_remove(hypr_watch_id[0])
+                        hypr_watch_id[0] = None
                 except Exception:
                     pass
-                release_focus_lock(my_pid)
+                try:
+                    if hypr_sock_ref[0] is not None:
+                        hypr_sock_ref[0].close()
+                        hypr_sock_ref[0] = None
+                except Exception:
+                    pass
+                # Immediately remove PID lockfile if it belongs to us
+                try:
+                    if _CURRENT_APP_NAME:
+                        lock_file = os.path.join(LOCK_DIR, f"{_CURRENT_APP_NAME}.pid")
+                        if os.path.exists(lock_file):
+                            with open(lock_file, "r") as f:
+                                if f.read().strip() == str(my_pid):
+                                    os.remove(lock_file)
+                except Exception:
+                    pass
+                try:
+                    noanim_cmd = f"dispatch setprop pid:{my_pid} noanim 1 ; " if not record else ""
+                    if not is_any_other_applet_running(my_pid):
+                        subprocess.Popen(
+                            ["hyprctl", "--batch", f"{noanim_cmd}keyword unbind ,mouse:272 ; keyword unbind ,mouse:273 ; keyword input:follow_mouse 1 ; keyword cursor:no_warps 0"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                        )
+                    else:
+                        subprocess.Popen(
+                            ["hyprctl", "--batch", f"{noanim_cmd}keyword unbind ,mouse:272 ; keyword unbind ,mouse:273"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                        )
+                except Exception:
+                    pass
+
+        def _dismiss(record=True):
+            if cleaned_up[0]:
+                return False
+            _cleanup(record=record)
+            try:
+                window.hide()
+                window.destroy()
+            except Exception:
+                pass
+            try:
+                app = window.get_application()
+                if app:
+                    app.quit()
+            except Exception:
+                pass
+            return False
 
         window.connect("destroy", _cleanup)
         atexit.register(_cleanup)
@@ -264,13 +318,13 @@ class SmartFocus:
 
         # Handle Outside Clicks:
         # Non-consuming Hyprland binds send SIGUSR1 to our process on mouse click anywhere.
-        def _on_mouse_click(signum, frame):
+        def _handle_outside_click(*args):
             if cleaned_up[0]:
-                return
+                return True
             if not getattr(window, "ready_to_close", False):
-                return
+                return True
             if getattr(window, "is_showing_dialog", False):
-                return
+                return True
             try:
                 pos_raw = subprocess.check_output(["hyprctl", "cursorpos"], timeout=0.15).decode().strip()
                 parts = [int(p.strip()) for p in pos_raw.split(",")]
@@ -281,37 +335,97 @@ class SmartFocus:
                 ww = getattr(window, "_applet_w", None)
                 wh = getattr(window, "_applet_h", None)
 
-                if wx is None or ww is None:
+                try:
                     cur_w, cur_h = window.get_size()
-                    ww = ww or cur_w or 380
-                    wh = wh or cur_h or 440
-                    import json
-                    res = subprocess.check_output(["hyprctl", "clients", "-j"], timeout=0.15).decode()
-                    clients = json.loads(res)
-                    for c in clients:
-                        if c.get("pid") == my_pid:
-                            wx, wy = c.get("at", [wx, wy])
-                            ww, wh = c.get("size", [ww, wh])
-                            window._applet_x = wx
-                            window._applet_y = wy
-                            window._applet_w = ww
-                            window._applet_h = wh
-                            break
+                    if cur_w and (ww is None or cur_w > ww):
+                        ww = cur_w
+                        window._applet_w = ww
+                    if cur_h and (wh is None or cur_h > wh):
+                        wh = cur_h
+                        window._applet_h = wh
+                except Exception:
+                    pass
 
                 if wx is not None and wy is not None and ww is not None and wh is not None:
-                    if (wx - 4) <= cx <= (wx + ww + 4) and (wy - 4) <= cy <= (wy + wh + 4):
-                        # Click was inside applet bounds
-                        return
+                    if (wx - 6) <= cx <= (wx + ww + 6) and (wy - 6) <= cy <= (wy + wh + 6):
+                        # Fast path: click is inside cached/GTK applet bounds
+                        return True
 
-                # Click was OUTSIDE applet bounds: dismiss!
-                record_closed(_CURRENT_APP_NAME)
-                from gi.repository import GLib
-                GLib.idle_add(window.close)
+                # Verify against live Hyprland client geometry (handles dynamic width/height & dialogs)
+                import json
+                res = subprocess.check_output(["hyprctl", "clients", "-j"], timeout=0.15).decode()
+                clients = json.loads(res)
+                for c in clients:
+                    if c.get("pid") == my_pid:
+                        c_x, c_y = c.get("at", [0, 0])
+                        c_w, c_h = c.get("size", [0, 0])
+                        window._applet_x = c_x
+                        window._applet_y = c_y
+                        window._applet_w = c_w
+                        window._applet_h = c_h
+                        if (c_x - 6) <= cx <= (c_x + c_w + 6) and (c_y - 6) <= cy <= (c_y + c_h + 6):
+                            # Click was inside live applet window bounds
+                            return True
+
+                # Click was genuinely OUTSIDE applet bounds: dismiss immediately!
+                _dismiss(record=True)
+                return False
+            except Exception:
+                pass
+            return True
+
+        try:
+            from gi.repository import GLib
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGUSR1, _handle_outside_click)
+        except Exception:
+            try:
+                signal.signal(signal.SIGUSR1, lambda s, f: _handle_outside_click())
             except Exception:
                 pass
 
+        # Listen to Hyprland IPC socket (.socket2.sock) to close immediately on workspace change
         try:
-            signal.signal(signal.SIGUSR1, _on_mouse_click)
+            from gi.repository import GLib
+            xdg = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+            sock_path = f"{xdg}/hypr/{sig}/.socket2.sock" if sig else None
+            if not sock_path or not os.path.exists(sock_path):
+                matches = glob.glob(f"{xdg}/hypr/*/.socket2.sock")
+                sock_path = matches[0] if matches else None
+
+            if sock_path and os.path.exists(sock_path):
+                hsock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                hsock.connect(sock_path)
+                hsock.setblocking(False)
+                hypr_sock_ref[0] = hsock
+                recv_buf = [""]
+
+                def _on_hypr_event(fd, condition):
+                    if cleaned_up[0]:
+                        return False
+                    if condition & (GLib.IO_HUP | GLib.IO_ERR):
+                        return False
+                    try:
+                        chunk = hsock.recv(4096).decode("utf-8", errors="ignore")
+                        if not chunk:
+                            return False
+                        recv_buf[0] += chunk
+                        while "\n" in recv_buf[0]:
+                            line, recv_buf[0] = recv_buf[0].split("\n", 1)
+                            if line.startswith(("workspace>>", "workspacev2>>", "activespecial>>", "focusedmon>>")):
+                                _dismiss(record=False)
+                                return False
+                    except BlockingIOError:
+                        pass
+                    except Exception:
+                        return False
+                    return True
+
+                hypr_watch_id[0] = GLib.io_add_watch(
+                    hsock.fileno(),
+                    GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                    _on_hypr_event
+                )
         except Exception:
             pass
 
@@ -321,8 +435,10 @@ class SmartFocus:
                 return False
             window.ready_to_close = True
             try:
-                subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:272,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.Popen(["hyprctl", "keyword", "bindn", f",mouse:273,exec,kill -USR1 {my_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    ["hyprctl", "--batch", f"keyword bindn ,mouse:272,exec,kill -USR1 {my_pid} ; keyword bindn ,mouse:273,exec,kill -USR1 {my_pid}"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
             except Exception:
                 pass
             return False

@@ -125,9 +125,10 @@ row:selected {
 .badge-connected {
     background: rgba(166, 227, 161, 0.15);
     color: #a6e3a1;
+    font-size: 11px;
     font-weight: bold;
-    border-radius: 6px;
-    padding: 4px 10px;
+    border-radius: 4px;
+    padding: 2px 6px;
     border: 1px solid rgba(166, 227, 161, 0.35);
 }
 
@@ -203,7 +204,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         # Advanced Settings Button (nm-connection-editor)
         self.btn_settings = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
         self.btn_settings.set_tooltip_text("Advanced Network Settings (nm-connection-editor)")
-        self.btn_settings.connect("clicked", lambda b: subprocess.Popen(["nm-connection-editor"]))
+        self.btn_settings.connect("clicked", self.on_open_advanced_settings)
         self.header.pack_end(self.btn_settings)
 
         # InfoBar for Messages/Errors
@@ -253,6 +254,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
 
         # Periodic auto-scan every 25 seconds
         GLib.timeout_add_seconds(25, self.on_auto_scan_timer)
+
+    def on_open_advanced_settings(self, *args):
+        launcher = os.path.expanduser("~/.local/bin/launch-app")
+        cmd = [launcher, "nm-connection-editor"] if os.path.exists(launcher) else ["nm-connection-editor"]
+        subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.close()
 
     def on_focus_out(self, widget, event):
         return False
@@ -508,6 +515,8 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         lbl_ssid = Gtk.Label()
         lbl_ssid.set_markup(f"<b>{GLib.markup_escape_text(net['ssid'])}</b>")
         lbl_ssid.set_halign(Gtk.Align.START)
+        lbl_ssid.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl_ssid.set_max_width_chars(18)
         title_box.pack_start(lbl_ssid, False, False, 0)
 
         if net["security"]:
@@ -515,7 +524,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             img_lock.set_tooltip_text(f"Secured Network: {net['security']}")
             title_box.pack_start(img_lock, False, False, 0)
 
-        if net["ssid"] in self.saved_connections and not net["in_use"]:
+        if net["in_use"]:
+            lbl_connected = Gtk.Label(label="Connected")
+            lbl_connected.get_style_context().add_class("badge-connected")
+            lbl_connected.set_valign(Gtk.Align.CENTER)
+            title_box.pack_start(lbl_connected, False, False, 2)
+        elif net["ssid"] in self.saved_connections:
             lbl_saved = Gtk.Label(label="Saved")
             lbl_saved.get_style_context().add_class("badge-saved")
             title_box.pack_start(lbl_saved, False, False, 0)
@@ -530,15 +544,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         lbl_details = Gtk.Label()
         lbl_details.set_markup(f"<small><span alpha='65%'>{GLib.markup_escape_text(detail_text)}</span></small>")
         lbl_details.set_halign(Gtk.Align.START)
+        lbl_details.set_ellipsize(Pango.EllipsizeMode.END)
+        lbl_details.set_max_width_chars(28)
         vbox_info.pack_start(lbl_details, False, False, 0)
 
         # Right Action Widgets
         if net["in_use"]:
-            lbl_connected = Gtk.Label(label="Connected")
-            lbl_connected.get_style_context().add_class("badge-connected")
-            lbl_connected.set_valign(Gtk.Align.CENTER)
-            hbox.pack_end(lbl_connected, False, False, 4)
-
             btn_disconnect = Gtk.Button(label="Disconnect")
             btn_disconnect.get_style_context().add_class("btn-disconnect")
             btn_disconnect.set_valign(Gtk.Align.CENTER)
@@ -588,10 +599,12 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             menu.append(Gtk.SeparatorMenuItem())
 
             item_settings = Gtk.MenuItem(label="Advanced Network Settings...")
-            item_settings.connect("activate", lambda i: subprocess.Popen(["nm-connection-editor"]))
+            item_settings.connect("activate", self.on_open_advanced_settings)
             menu.append(item_settings)
 
             menu.show_all()
+            self.is_showing_dialog = True
+            menu.connect("deactivate", lambda m: GLib.timeout_add(250, lambda: setattr(self, "is_showing_dialog", False) or False))
             menu.popup(None, None, None, None, event.button, event.time)
             return True
         return False
@@ -758,9 +771,9 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         btn_ok.get_style_context().add_class("btn-connect")
         dialog.set_default_response(Gtk.ResponseType.OK)
 
+        self.is_showing_dialog = True
         dialog.show_all()
         on_ca_mode_changed(combo_ca)
-        self.is_showing_dialog = True
         try:
             response = dialog.run()
             identity = entry_user.get_text().strip()
@@ -773,7 +786,7 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
             ca_cert_path = file_ca.get_filename() if ca_mode == "file" else None
         finally:
             dialog.destroy()
-            self.is_showing_dialog = False
+            GLib.timeout_add(250, lambda: setattr(self, "is_showing_dialog", False) or False)
 
         if response == Gtk.ResponseType.OK and identity and password:
             self._do_connect_enterprise(
@@ -868,14 +881,14 @@ class WifiManagerWindow(Gtk.ApplicationWindow):
         btn_ok.get_style_context().add_class("btn-connect")
         dialog.set_default_response(Gtk.ResponseType.OK)
 
-        dialog.show_all()
         self.is_showing_dialog = True
+        dialog.show_all()
         try:
             response = dialog.run()
             password = entry.get_text()
         finally:
             dialog.destroy()
-            self.is_showing_dialog = False
+            GLib.timeout_add(250, lambda: setattr(self, "is_showing_dialog", False) or False)
 
         if response == 42:
             self.show_enterprise_dialog(net or {"ssid": ssid, "security": "WPA2 802.1X"})
