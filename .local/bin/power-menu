@@ -727,7 +727,26 @@ class PowerMenuWindow(Gtk.ApplicationWindow):
                 mon_name, width, height, scale, _cur_hz, _avail = self.get_monitor_info()
                 scale_str = f"{scale:g}"
                 mon_spec = f"{mon_name},{width}x{height}@{hz},auto,{scale_str}"
-                subprocess.run(["hyprctl", "keyword", "monitor", mon_spec], check=True)
+                subprocess.run(
+                    ["hyprctl", "eval", f'hl.monitor({{ output = "{mon_name}", mode = "{width}x{height}@{hz}", position = "auto", scale = {scale_str} }})'],
+                    check=True
+                )
+
+                lua_path = os.path.expanduser("~/.config/hypr/hyprland.lua")
+                if os.path.exists(lua_path):
+                    try:
+                        import re
+                        with open(lua_path, "r") as f:
+                            lua_content = f.read()
+                        lua_content = re.sub(
+                            rf'(output\s*=\s*"{re.escape(mon_name)}"\s*,\s*mode\s*=\s*")[^"]+(")',
+                            rf'\g<1>{width}x{height}@{hz}\g<2>',
+                            lua_content
+                        )
+                        with open(lua_path, "w") as f:
+                            f.write(lua_content)
+                    except Exception:
+                        pass
 
                 for conf_path in (
                     os.path.expanduser("~/.config/hypr/monitors.conf"),

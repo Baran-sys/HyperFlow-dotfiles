@@ -221,7 +221,7 @@ class PowerSessionWindow(Gtk.ApplicationWindow):
 
     def action_logout(self):
         self.close()
-        subprocess.Popen(["hyprctl", "dispatch", "exit"])
+        subprocess.Popen(["hyprctl", "dispatch", "hl.dsp.exit()"])
 
     def action_suspend(self):
         self.close()

@@ -619,7 +619,7 @@ class MediaPlayerWindow(Gtk.ApplicationWindow):
                 self.hide()
                 self.close()
                 subprocess.Popen(
-                    ["sh", "-c", f'sleep 0.04; hyprctl --batch "keyword input:follow_mouse 1 ; keyword cursor:no_warps 1 ; dispatch focuswindow address:{addr} ; keyword cursor:no_warps 0"'],
+                    ["sh", "-c", f"sleep 0.04; hyprctl eval \"hl.config({{ input = {{ follow_mouse = 1 }}, cursor = {{ no_warps = true }} }}); hl.dispatch(hl.dsp.focus({{ window = 'address:{addr}' }})); hl.config({{ cursor = {{ no_warps = false }} }})\""],
                     start_new_session=True,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL

@@ -4,10 +4,10 @@
 read -r is_floating < <(hyprctl activewindow -j 2>/dev/null | jq -r '.floating // empty')
 
 if [ "$is_floating" = "true" ]; then
-    hyprctl dispatch togglefloating
+    hyprctl dispatch 'hl.dsp.window.float({ action = "toggle" })'
 else
     read -r mon_w mon_h mon_scale < <(hyprctl monitors -j 2>/dev/null | jq -r '(.[] | select(.focused == true)) // .[0] | "\(.width) \(.height) \(.scale)"' 2>/dev/null || echo "1920 1080 1")
     target_w=$(awk -v w="${mon_w:-1920}" -v s="${mon_scale:-1}" 'BEGIN { printf "%d", (w / s) * 0.76 }')
     target_h=$(awk -v h="${mon_h:-1080}" -v s="${mon_scale:-1}" 'BEGIN { printf "%d", (h / s) * 0.78 }')
-    hyprctl --batch "dispatch togglefloating; dispatch resizeactive exact ${target_w} ${target_h}; dispatch centerwindow"
+    hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = 'toggle' })); hl.dispatch(hl.dsp.window.resize({ x = ${target_w}, y = ${target_h}, relative = false })); hl.dispatch(hl.dsp.window.center())"
 fi

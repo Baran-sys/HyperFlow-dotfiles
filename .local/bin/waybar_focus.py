@@ -68,8 +68,7 @@ def fast_toggle_or_lock(app_name):
 
     # Clean up any lingering Hyprland mouse binds
     try:
-        subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:272"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.Popen(["hyprctl", "keyword", "unbind", ",mouse:273"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["hyprctl", "eval", 'hl.unbind("mouse:272"); hl.unbind("mouse:273")'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -176,7 +175,7 @@ def acquire_focus_lock(my_pid=None):
     if my_pid is None:
         my_pid = os.getpid()
     try:
-        subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["hyprctl", "eval", 'hl.config({ input = { follow_mouse = 0 } })'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -185,8 +184,7 @@ def release_focus_lock(my_pid=None):
         my_pid = os.getpid()
     if not is_any_other_applet_running(my_pid):
         try:
-            subprocess.Popen(["hyprctl", "keyword", "input:follow_mouse", "1"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.Popen(["hyprctl", "keyword", "cursor:no_warps", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(["hyprctl", "eval", 'hl.config({ input = { follow_mouse = 1 }, cursor = { no_warps = false } })'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 
@@ -218,7 +216,7 @@ class SmartFocus:
                 window._applet_w = default_w
                 window._applet_h = default_h
                 subprocess.Popen(
-                    ["hyprctl", "dispatch", "movewindowpixel", f"exact {x} {y},pid:{os.getpid()}"],
+                    ["hyprctl", "eval", f'hl.dispatch(hl.dsp.window.move({{ x = {x}, y = {y}, relative = false, window = "pid:{os.getpid()}" }}))'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
                 return x, y
@@ -303,15 +301,15 @@ class SmartFocus:
                 except Exception:
                     pass
                 try:
-                    noanim_cmd = f"dispatch setprop pid:{my_pid} noanim 1 ; " if not record else ""
+                    noanim_lua = f'hl.dispatch(hl.dsp.window.set_prop({{ prop = "no_anim", value = "1", window = "pid:{my_pid}" }})); ' if not record else ""
                     if not is_any_other_applet_running(my_pid):
                         subprocess.Popen(
-                            ["hyprctl", "--batch", f"{noanim_cmd}keyword unbind ,mouse:272 ; keyword unbind ,mouse:273 ; keyword input:follow_mouse 1 ; keyword cursor:no_warps 0"],
+                            ["hyprctl", "eval", f'{noanim_lua}hl.unbind("mouse:272"); hl.unbind("mouse:273"); hl.config({{ input = {{ follow_mouse = 1 }}, cursor = {{ no_warps = false }} }})'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                         )
                     else:
                         subprocess.Popen(
-                            ["hyprctl", "--batch", f"{noanim_cmd}keyword unbind ,mouse:272 ; keyword unbind ,mouse:273"],
+                            ["hyprctl", "eval", f'{noanim_lua}hl.unbind("mouse:272"); hl.unbind("mouse:273")'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                         )
                 except Exception:
@@ -471,7 +469,7 @@ class SmartFocus:
             window.ready_to_close = True
             try:
                 subprocess.Popen(
-                    ["hyprctl", "--batch", f"keyword bindn ,mouse:272,exec,kill -USR1 {my_pid} ; keyword bindn ,mouse:273,exec,kill -USR1 {my_pid}"],
+                    ["hyprctl", "eval", f'hl.bind("mouse:272", hl.dsp.exec_cmd("kill -USR1 {my_pid}"), {{ non_consuming = true, mouse = true }}); hl.bind("mouse:273", hl.dsp.exec_cmd("kill -USR1 {my_pid}"), {{ non_consuming = true, mouse = true }})'],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
             except Exception:
